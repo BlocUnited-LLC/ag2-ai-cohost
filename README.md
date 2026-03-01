@@ -142,17 +142,18 @@ AG2_BACKEND_URL=http://your-ag2-host:5050 npm start
 
 AG2 uses **WebSocket-based signaling**, not a REST offer/answer API.
 
-```
-Browser            Express (3000)         AG2 Python (5050)
-  |--WS /session-→ proxy /session ------→ /session WebSocket
-  |                                            |
-  |      ephemeral key + session config ←------|
-  |                                            |
-  |--SDP offer → OpenAI (direct P2P)          |
-  |← SDP answer ← OpenAI (direct P2P)         |
-  |                                            |
-  |═══ audio P2P ══ OpenAI Realtime API ═══   |
-  |← DataChannel events ←--------------------|
+```text
+Browser                 Express (3000)                 AG2 Python (5050)
+   |                           |                                |
+   |--- WebSocket /session --->|--- proxy /session ----------->|
+   |                           |                                |
+   |<-- ephemeral key + session config -------------------------|
+   |                           |                                |
+   |--- SDP offer ------------> OpenAI Realtime API (direct P2P)
+   |<-- SDP answer ----------- OpenAI Realtime API (direct P2P)
+   |                           |                                |
+   |==== audio (P2P) ======== OpenAI Realtime API =============|
+   |<=== DataChannel events ====================================|
 ```
 
 On connection failure the client: closes WS + PeerConnection → waits 2 s → reconnects. No page reload.
