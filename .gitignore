@@ -1,2 +1,5 @@
 node_modules/
 .env
+
+# AG2 Python backend — cloned separately, not part of this repo
+ag2-backend/
