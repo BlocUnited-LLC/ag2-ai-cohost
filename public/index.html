@@ -29,10 +29,31 @@
   </script>
 -->
 
-<script src='libs/talkinghead.js'></script>
-<script src='js/avatar.js'></script>
-<script src='js/webrtc.js'></script>
-<script src='js/main.js'></script>
+<!--
+  Import map: maps bare module specifiers used inside talkinghead.mjs
+  to CDN URLs. No local copy of TalkingHead or Three.js is required.
+  Avatar.js imports TalkingHead and HeadAudio directly via these mappings.
+-->
+<script type='importmap'>
+{
+  "imports": {
+    "three":          "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js/+esm",
+    "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "talkinghead":    "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.7/modules/talkinghead.mjs"
+  }
+}
+</script>
+
+<!--
+  All scripts are ES modules (deferred by default).
+  Execution order is document order, which guarantees:
+    1. avatar.js  — defines window.initAvatar + window.setupHeadAudio
+    2. webrtc.js  — defines window.initWebRTC
+    3. main.js    — calls both after DOM is ready
+-->
+<script type='module' src='js/avatar.js'></script>
+<script type='module' src='js/webrtc.js'></script>
+<script type='module' src='js/main.js'></script>
 
 </body>
 </html>

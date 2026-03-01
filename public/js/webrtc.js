@@ -210,8 +210,10 @@
         console.warn('[WebRTC] Audio play() suppressed (autoplay policy):', e.message);
       });
 
-      if (typeof window.attachAudioToAvatar === 'function') {
-        window.attachAudioToAvatar(audioEl);
+      // Wire remote MediaStream into HeadAudio for real-time lip-sync.
+      // setupHeadAudio is defined by avatar.js; it is safe to call on reconnect.
+      if (typeof window.setupHeadAudio === 'function') {
+        window.setupHeadAudio(event.streams[0]);
       }
     };
 

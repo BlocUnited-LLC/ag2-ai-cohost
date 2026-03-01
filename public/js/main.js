@@ -17,7 +17,10 @@
     e.preventDefault();  // suppress browser "Uncaught (in promise)" noise in OBS
   });
 
-  window.addEventListener('DOMContentLoaded', async function () {
+  // ES module scripts are deferred — by the time this runs the DOM is already
+  // parsed and avatar.js / webrtc.js have already defined their window.* exports.
+  // Use the readyState guard so the same code also works if somehow called early.
+  async function boot() {
     // Step 1: Avatar must be ready before WebRTC can attach audio to it
     try {
       await window.initAvatar();
@@ -33,7 +36,13 @@
       console.error('[Main] WebRTC initialization failed:', err);
       // webrtc.js schedules its own reconnect; this catch is a last-resort guard
     }
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
 
   // Optional: clean up on page hide (browser tab switch / OBS scene swap)
   // Reconnection runs automatically when the page becomes visible again via OBS.
