@@ -37,7 +37,7 @@ async function initAvatar() {
 
   try {
     await talkingHead.showAvatar({
-      url:          'assets/avatar.glb',
+      url:          'assets/julia.glb',
       body:         'F',           // 'M' for male avatars
       lipsyncLang:  'en',
       avatarMood:   'neutral'
