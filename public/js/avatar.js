@@ -11,7 +11,7 @@
 //   avatar.glb         — export from https://avaturn.me  (free, non-commercial)
 
 import { TalkingHead } from "talkinghead";
-import { HeadAudioNode } from "../libs/headaudio.mjs";
+import { HeadAudio } from "../libs/headaudio.mjs";
 
 // ── Private state ─────────────────────────────────────────────────────────────
 let talkingHead       = null;
@@ -82,7 +82,7 @@ async function setupHeadAudio(mediaStream) {
   }
 
   try {
-    headAudio = new HeadAudioNode(talkingHead.audioCtx, {
+    headAudio = new HeadAudio(talkingHead.audioCtx, {
       processorOptions: {},
       parameterData: {
         vadMode:             1,     // gate-based VAD

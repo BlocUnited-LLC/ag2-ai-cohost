@@ -34,6 +34,12 @@
   to CDN URLs. No local copy of TalkingHead or Three.js is required.
   Avatar.js imports TalkingHead and HeadAudio directly via these mappings.
 -->
+<!--
+  ag2client v0.3.1 — handles WebSocket /session signaling + WebRTC to OpenAI.
+  Must load before the ES module scripts below.
+-->
+<script src='https://github.com/ag2ai/ag2-js-client/releases/download/v0.3.1/index.global.js'></script>
+
 <script type='importmap'>
 {
   "imports": {
