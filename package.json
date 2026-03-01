@@ -4,8 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "setup": "node scripts/setup-ag2.js",
     "start": "node server.js",
-    "start:ag2": "cd ag2-backend && ..\\.venv\\Scripts\\uvicorn.exe realtime_over_webrtc.main:app --port 5050",
+    "start:ag2": "node scripts/start-ag2.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
