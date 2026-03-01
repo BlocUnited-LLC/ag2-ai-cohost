@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>AI Cohost</title>
+    <link rel='stylesheet' href='css/styles.css'>
+</head>
+<body>
+
+<!-- Avatar rendering surface -->
+<div id='avatar-container'></div>
+
+<!-- Remote AI audio — srcObject is set by webrtc.js, never has a src attribute -->
+<audio id='ai-audio' autoplay playsinline></audio>
+
+<!-- Subtitle overlay: shown/hidden by webrtc.js DataChannel messages -->
+<div id='subtitle-overlay' aria-live='polite'></div>
+
+<!-- Thinking indicator: toggled when AG2 sends type=thinking -->
+<div id='thinking-indicator' aria-live='polite'>Thinking&hellip;</div>
+
+<!--
+  Optional runtime config — set window.COHOST_CONFIG before the scripts below
+  to point at a remote signaling server:
+
+  <script>
+    window.COHOST_CONFIG = { signalingBaseUrl: 'http://192.168.1.100:3000' };
+  </script>
+-->
+
+<script src='libs/talkinghead.js'></script>
+<script src='js/avatar.js'></script>
+<script src='js/webrtc.js'></script>
+<script src='js/main.js'></script>
+
+</body>
+</html>
