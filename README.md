@@ -21,7 +21,7 @@ This repository is the **browser-side client only**. It requires a separate AG2 
 Your Mic
   → AG2 RealtimeAgent  (Python/FastAPI, port 5050)
       ↕ WebSocket /session  ← signaling only
-  → Express server  (Node.js, port 3000)  ← proxies /session + serves static files
+  → Express server  (Node.js, port 3001)  ← proxies /session + serves static files
       ↕ WebSocket proxy
   → Browser
       • RTCPeerConnection ↔ OpenAI Realtime API  (P2P audio)
@@ -99,38 +99,45 @@ From https://github.com/met4citizen/HeadAudio, download and place in `public/lib
 
 ### 4. Set up the AG2 Python backend
 
-The AG2 backend is a **separate Python project** — not included in this repo.
+The AG2 backend lives in the `ag2-backend/` subfolder (already cloned on this machine).
+Its `OAI_CONFIG_LIST` already contains the API key.
+
+First-time setup on a new machine:
 
 ```bash
-git clone https://github.com/ag2ai/realtime-agent-over-webrtc.git
-cd realtime-agent-over-webrtc
-cp OAI_CONFIG_LIST_sample OAI_CONFIG_LIST
-# Edit OAI_CONFIG_LIST — add your sk-proj-... OpenAI API key
+git clone https://github.com/ag2ai/realtime-agent-over-webrtc.git ag2-backend
+cd ag2-backend
+copy OAI_CONFIG_LIST_sample OAI_CONFIG_LIST
+# Edit OAI_CONFIG_LIST — add your sk-proj-... OpenAI API key (NOT sk- legacy keys)
 pip install -r requirements.txt
-uvicorn realtime_over_webrtc.main:app --port 5050
 ```
 
-Expected: `INFO: Uvicorn running on http://0.0.0.0:5050`
+### 5. Run both servers
 
-### 5. Start this browser client
+Open **two terminals**, both in the project root:
 
+**Terminal 1 — AG2 Python backend (port 5050):**
+```bash
+npm run start:ag2
+```
+Expected: `INFO: Uvicorn running on http://127.0.0.1:5050`
+
+**Terminal 2 — Express browser server (port 3001):**
 ```bash
 npm start
-# open http://localhost:3000
 ```
+Expected: `[Server] AI Cohost running at http://localhost:3001`
 
-To point at a non-default AG2 host:
+Then open **`http://localhost:3001`** in Chrome or Edge.
 
-```bash
-AG2_BACKEND_URL=http://your-ag2-host:5050 npm start
-```
+> Note: port 3001 is used to avoid conflicts with other local dev servers (e.g. Vite apps on 3000).
 
 ---
 
 ## OBS Integration
 
 1. Open OBS → Add **Browser Source**
-2. URL: `http://localhost:3000`
+2. URL: `http://localhost:3001`
 3. Set width/height (e.g. 1280×720)
 4. Enable transparency (background is `transparent` in CSS)
 5. Route OBS browser audio to a separate track if needed
@@ -143,7 +150,7 @@ AG2_BACKEND_URL=http://your-ag2-host:5050 npm start
 AG2 uses **WebSocket-based signaling**, not a REST offer/answer API.
 
 ```text
-Browser                 Express (3000)                 AG2 Python (5050)
+Browser                 Express (3001)                 AG2 Python (5050)
    |                           |                                |
    |--- WebSocket /session --->|--- proxy /session ----------->|
    |                           |                                |
