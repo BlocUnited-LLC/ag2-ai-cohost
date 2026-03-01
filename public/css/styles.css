@@ -70,3 +70,42 @@ html, body {
 #thinking-indicator.visible {
     opacity: 1;
 }
+
+/* ── Click-to-start overlay ──────────────────────────────────────────────────
+   Chrome blocks AudioContext before a user gesture. This overlay is shown on
+   load and hidden once the user clicks — resuming the AudioContext and
+   registering the HeadAudio worklet for lip-sync.
+   ──────────────────────────────────────────────────────────────────────── */
+#start-overlay {
+    position:        fixed;
+    inset:           0;
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    background:      rgba(0, 0, 0, 0.45);
+    z-index:         9999;
+    transition:      opacity 0.4s ease;
+}
+
+#start-overlay.hidden {
+    opacity:        0;
+    pointer-events: none;
+}
+
+#start-btn {
+    padding:         20px 48px;
+    font-size:       1.5em;
+    font-family:     'Segoe UI', Arial, sans-serif;
+    font-weight:     600;
+    color:           #ffffff;
+    background:      rgba(255, 255, 255, 0.12);
+    border:          2px solid rgba(255, 255, 255, 0.55);
+    border-radius:   14px;
+    cursor:          pointer;
+    backdrop-filter: blur(10px);
+    letter-spacing:  0.04em;
+    transition:      background 0.2s ease, transform 0.1s ease;
+}
+
+#start-btn:hover  { background: rgba(255, 255, 255, 0.24); }
+#start-btn:active { transform: scale(0.97); }

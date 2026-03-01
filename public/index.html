@@ -20,6 +20,17 @@
 <!-- Thinking indicator: toggled when AG2 sends type=thinking -->
 <div id='thinking-indicator' aria-live='polite'>Thinking&hellip;</div>
 
+<!-- Click-to-start overlay: Chrome requires a user gesture before AudioContext
+     can run. Clicking this button resumes the AudioContext, registers the
+     HeadAudio worklet, and activates lip-sync. -->
+<div id='start-overlay'>
+  <button id='start-btn' onclick="
+    var overlay = document.getElementById('start-overlay');
+    overlay.classList.add('hidden');
+    if (typeof window.resumeAudio === 'function') window.resumeAudio();
+  ">&#9654; Click to Start</button>
+</div>
+
 <!--
   Optional runtime config — set window.COHOST_CONFIG before the scripts below
   to point at a remote signaling server:

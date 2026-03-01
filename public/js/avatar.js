@@ -18,6 +18,7 @@ let talkingHead       = null;
 let headAudio         = null;
 let workletRegistered = false;
 let lastStream        = null;   // detect reconnect re-use of same stream
+let pendingStream     = null;   // stream that arrived before worklet was ready
 
 // ── TalkingHead initialisation ────────────────────────────────────────────────
 // Called once by main.js.  AG2 provides speech via WebRTC, so ttsEndpoint is null.
@@ -48,15 +49,11 @@ async function initAvatar() {
     // Non-fatal — WebRTC will still connect even if the model is missing.
   }
 
-  // Pre-register the HeadAudio worklet processor now so that the first
-  // WebRTC audio track can be wired up without any extra async delay.
-  try {
-    await talkingHead.audioCtx.audioWorklet.addModule('./libs/headworklet.mjs');
-    workletRegistered = true;
-    console.info('[Avatar] HeadAudio worklet registered.');
-  } catch (err) {
-    console.warn('[Avatar] HeadAudio worklet registration failed (lip-sync will not work):', err);
-  }
+  // ⚠ Do NOT register the worklet here — Chrome's AudioContext autoplay policy
+  // blocks AudioContext (and therefore addModule) until a user gesture occurs.
+  // worklet registration is deferred to resumeAudio(), called by the
+  // "Click to Start" overlay button in index.html.
+  console.info('[Avatar] Avatar ready — waiting for user gesture to resume AudioContext.');
 }
 
 // ── HeadAudio lip-sync setup ──────────────────────────────────────────────────
@@ -68,7 +65,9 @@ async function setupHeadAudio(mediaStream) {
     return;
   }
   if (!workletRegistered) {
-    console.warn('[Avatar] HeadAudio worklet not registered — lip-sync unavailable.');
+    // Worklet not ready yet (waiting for user click) — store stream for later.
+    pendingStream = mediaStream;
+    console.info('[Avatar] Lip-sync deferred — waiting for user gesture.');
     return;
   }
   if (mediaStream === lastStream) return;   // same stream on reconnect — no-op
@@ -116,6 +115,39 @@ async function setupHeadAudio(mediaStream) {
   }
 }
 
+// ── AudioContext resume (called by the Click-to-Start button) ────────────────
+// Chrome blocks AudioContext until a user gesture. This function:
+//   1. Resumes the AudioContext created by TalkingHead
+//   2. Registers the HeadAudio AudioWorklet processor
+//   3. Applies lip-sync to any audio track that arrived while we were waiting
+async function resumeAudio() {
+  if (!talkingHead || !talkingHead.audioCtx) {
+    console.warn('[Avatar] resumeAudio: TalkingHead not ready yet — retrying in 500 ms.');
+    setTimeout(resumeAudio, 500);
+    return;
+  }
+  try {
+    if (talkingHead.audioCtx.state === 'suspended') {
+      await talkingHead.audioCtx.resume();
+      console.info('[Avatar] AudioContext resumed.');
+    }
+    if (!workletRegistered) {
+      await talkingHead.audioCtx.audioWorklet.addModule('./libs/headworklet.mjs');
+      workletRegistered = true;
+      console.info('[Avatar] HeadAudio worklet registered.');
+    }
+    // Process any stream that arrived before the worklet was ready
+    if (pendingStream) {
+      const s = pendingStream;
+      pendingStream = null;
+      await setupHeadAudio(s);
+    }
+  } catch (err) {
+    console.error('[Avatar] resumeAudio failed:', err);
+  }
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 window.initAvatar     = initAvatar;
 window.setupHeadAudio = setupHeadAudio;
+window.resumeAudio    = resumeAudio;
