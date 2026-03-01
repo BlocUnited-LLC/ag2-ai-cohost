@@ -1,211 +1,128 @@
-# AI Cohost (AG2 + TalkingHead + OBS)
+# AI Cohost
 
-A real-time AI podcast co-host built with:
+A browser-based AI avatar that listens through your microphone and talks back in real time — with lip-sync. Designed to be used as an OBS Browser Source for live streams and podcasts.
 
-- [AG2 RealtimeAgent](https://docs.ag2.ai/latest/docs/user-guide/advanced-concepts/realtime-agent/webrtc/) (Python/FastAPI backend, WebSocket signaling)
-- [TalkingHead](https://github.com/met4citizen/TalkingHead) (Three.js 3D avatar — loads from CDN, no local file needed)
-- [HeadAudio](https://github.com/met4citizen/HeadAudio) (audio-driven real-time lip-sync)
-- OBS Browser Source
-
-This project renders a live 3D avatar in the browser, streams real-time AI voice from AG2/OpenAI via WebRTC, performs lip-sync using HeadAudio, and integrates directly into OBS.
-
-No Unity. No Unreal. No frontend frameworks.
+**How it works:** You speak → the AI responds with its voice → the 3D avatar's mouth moves in sync.
 
 ---
 
-## How It Works
+## What you need before starting
 
-This repository is the **browser-side client only**. It requires a separate AG2 Python backend.
-
-```
-Your Mic
-  → AG2 RealtimeAgent  (Python/FastAPI, port 5050)
-      ↕ WebSocket /session  ← signaling only
-  → Express server  (Node.js, port 3001)  ← proxies /session + serves static files
-      ↕ WebSocket proxy
-  → Browser
-      • RTCPeerConnection ↔ OpenAI Realtime API  (P2P audio)
-      • HeadAudio → TalkingHead lip-sync
-      • DataChannel → subtitle overlay
-  → OBS Browser Source
-```
-
-Audio travels **peer-to-peer between the browser and OpenAI** — the AG2 Python backend handles only WebSocket signaling (ephemeral key exchange, session config). Express proxies that WebSocket so the browser talks to a single host.
+- [Node.js](https://nodejs.org) (v18 or later)
+- [Python](https://www.python.org/downloads/) (v3.10 or later) — needed for the AI backend
+- [Git](https://git-scm.com) — needed to clone the project
+- An **OpenAI API key** with access to `gpt-4o-mini-realtime-preview` — get one at [platform.openai.com](https://platform.openai.com)
+- Chrome or Edge browser (required for WebRTC mic access)
 
 ---
 
-## Project Structure
+## Setup (first time only)
 
-```
-ai-cohost/
-├── server.js                   Node.js dev server (static + WebSocket proxy)
-├── package.json
-├── ag2-cohost.md               Step-by-step implementation checklist
-└── public/
-    ├── index.html              OBS Browser Source entry point
-    ├── css/
-    │   └── styles.css
-    ├── js/
-    │   ├── webrtc.js           AG2 WebSocket signaling + WebRTC + DataChannel
-    │   ├── avatar.js           TalkingHead + HeadAudio integration
-    │   └── main.js             Bootstrap
-    ├── libs/                   YOU MUST ADD these (see Setup)
-    │   ├── headaudio.mjs       from github.com/met4citizen/HeadAudio
-    │   ├── headworklet.mjs     from github.com/met4citizen/HeadAudio
-    │   └── model-en-mixed.bin  from github.com/met4citizen/HeadAudio
-    └── assets/                 YOU MUST ADD this
-        └── avatar.glb          from avaturn.me (free, non-commercial)
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/BlocUnited-LLC/ag2-ai-cohost.git
+cd ag2-ai-cohost
 ```
 
-TalkingHead and Three.js load from **CDN** via an importmap — no local copy required.
+### 2. Install dependencies and set up the AI backend
 
----
-
-## Prerequisites
-
-| Requirement | Details |
-|---|---|
-| Node.js 18+ | For built-in `fetch` and this Express server |
-| Python 3.10+ | For the AG2 backend |
-| OpenAI API key | **Must start with `sk-proj-`** — legacy `sk-` keys cause 500 errors |
-| Avatar GLB | From [Avaturn](https://avaturn.me) (free, non-commercial). Ready Player Me shut down Jan 31 2026. |
-| HeadAudio files | 3 files from [HeadAudio repo](https://github.com/met4citizen/HeadAudio) |
-
----
-
-## Setup
-
-### 1. Install Node dependencies
+This single command does everything: downloads the AI backend, creates a Python environment, and installs all required packages.
 
 ```bash
 npm install
+npm run setup
 ```
 
-### 2. Add HeadAudio files
+### 3. Add your OpenAI API key
 
-From https://github.com/met4citizen/HeadAudio, download and place in `public/libs/`:
+Open the file `ag2-backend/OAI_CONFIG_LIST` in any text editor and replace `<your OpenAI API key here>` with your actual key:
 
-| File in HeadAudio repo | Save as |
-|---|---|
-| `modules/headaudio.mjs` | `public/libs/headaudio.mjs` |
-| `modules/headworklet.mjs` | `public/libs/headworklet.mjs` |
-| `dist/model-en-mixed.bin` | `public/libs/model-en-mixed.bin` |
-
-### 3. Add your avatar
-
-1. Go to https://avaturn.me
-2. Create your character and export the `.glb`
-3. Save as `public/assets/avatar.glb`
-
-### 4. Set up the AG2 Python backend
-
-The AG2 backend lives in the `ag2-backend/` subfolder (already cloned on this machine).
-Its `OAI_CONFIG_LIST` already contains the API key.
-
-First-time setup on a new machine:
-
-```bash
-git clone https://github.com/ag2ai/realtime-agent-over-webrtc.git ag2-backend
-cd ag2-backend
-copy OAI_CONFIG_LIST_sample OAI_CONFIG_LIST
-# Edit OAI_CONFIG_LIST — add your sk-proj-... OpenAI API key (NOT sk- legacy keys)
-pip install -r requirements.txt
+```json
+[
+  {
+    "model": "gpt-4o-mini-realtime-preview",
+    "api_key": "sk-proj-...",
+    "tags": ["gpt-4o-mini-realtime", "realtime"]
+  }
+]
 ```
 
-### 5. Run both servers
+> **Keep this file private.** It is already in `.gitignore` so it will never be accidentally committed.
 
-Open **two terminals**, both in the project root:
+---
 
-**Terminal 1 — AG2 Python backend (port 5050):**
+## Running the app
+
+You need **two terminals** open at the same time.
+
+**Terminal 1 — AI backend:**
 ```bash
 npm run start:ag2
 ```
-Expected: `INFO: Uvicorn running on http://127.0.0.1:5050`
 
-**Terminal 2 — Express browser server (port 3001):**
+**Terminal 2 — Web server:**
 ```bash
 npm start
 ```
-Expected: `[Server] AI Cohost running at http://localhost:3001`
 
-Then open **`http://localhost:3001`** in Chrome or Edge.
-
-> Note: port 3001 is used to avoid conflicts with other local dev servers (e.g. Vite apps on 3000).
+Then open **http://localhost:3001** in Chrome or Edge.
 
 ---
 
-## OBS Integration
+## Using the app
 
-1. Open OBS → Add **Browser Source**
-2. URL: `http://localhost:3001`
-3. Set width/height (e.g. 1280×720)
-4. Enable transparency (background is `transparent` in CSS)
-5. Route OBS browser audio to a separate track if needed
-6. Hide scene → re-show → confirm auto-reconnect triggers
+1. The 3D avatar will appear on screen.
+2. Click the **▶ Click to Start** button — this is required by the browser to enable audio.
+3. Allow microphone access when the browser prompts you.
+4. Start talking. The AI will respond and the avatar's mouth will move.
 
 ---
 
-## WebRTC Architecture
+## Using with OBS
 
-AG2 uses **WebSocket-based signaling**, not a REST offer/answer API.
+1. In OBS, add a **Browser Source** to your scene.
+2. Set the URL to `http://localhost:3001`.
+3. Set the width/height to match your scene (e.g. 1280 × 720).
+4. Check **Shutdown source when not visible** to save resources.
 
-```text
-Browser                 Express (3001)                 AG2 Python (5050)
-   |                           |                                |
-   |--- WebSocket /session --->|--- proxy /session ----------->|
-   |                           |                                |
-   |<-- ephemeral key + session config -------------------------|
-   |                           |                                |
-   |--- SDP offer ------------> OpenAI Realtime API (direct P2P)
-   |<-- SDP answer ----------- OpenAI Realtime API (direct P2P)
-   |                           |                                |
-   |==== audio (P2P) ======== OpenAI Realtime API =============|
-   |<=== DataChannel events ====================================|
+> Both servers (Terminal 1 and Terminal 2) must be running while you stream.
+
+---
+
+## Customising the AI persona
+
+The AI's name, personality, and opening line are defined in `ag2-config/main.py`. Edit the `system_message` field to change how the AI behaves, then restart Terminal 1.
+
+---
+
+## Keeping the AI backend up to date
+
+The `ag2-backend/` folder is a Git submodule pointing to the [AG2 upstream repo](https://github.com/ag2ai/realtime-agent-over-webrtc). To pull the latest changes:
+
+```bash
+git submodule update --remote ag2-backend
+npm run setup
 ```
 
-On connection failure the client: closes WS + PeerConnection → waits 2 s → reconnects. No page reload.
+`npm run setup` re-applies your custom `main.py` after the update.
 
 ---
 
-## DataChannel Message Format
+## Troubleshooting
 
-```json
-{ "type": "subtitle", "payload": "Text to show on screen." }
-{ "type": "thinking", "payload": true }
-{ "type": "event",    "payload": {} }
-```
+**Avatar loads but there's no audio / mic doesn't work**
+- Make sure you clicked **▶ Click to Start** after the page loaded
+- Check that you allowed microphone access — click the lock icon in the address bar to verify
+- Confirm Terminal 1 (AG2 backend) is still running
 
-Malformed JSON is caught and logged — it never throws.
+**"AG2 backend unreachable" or connection errors**
+- Make sure Terminal 1 is running (`npm run start:ag2`)
+- Re-run `npm run setup` and confirm `ag2-backend/OAI_CONFIG_LIST` has a valid API key
 
----
+**Avatar mouth doesn't move**
+- Open the browser DevTools console (F12) and look for `[Avatar] HeadAudio lip-sync active.`
+- If you see an error instead, try refreshing the page and clicking **▶ Click to Start** again
 
-## Design Constraints
-
-- Vanilla JavaScript only (no React, no Vue)
-- No additional servers beyond the single Express instance
-- No modification of TalkingHead or HeadAudio internals
-- Must run inside OBS Browser Source
-- Must survive multi-hour streams
-- Must auto-reconnect without page reload
-
----
-
-## Production Notes
-
-- Run behind HTTPS in production
-- Host the AG2 Python backend behind a reverse proxy (nginx, Caddy)
-- Set `AG2_BACKEND_URL` env var to point at your public AG2 host
-- OpenAI API key must be `sk-proj-` format
-
----
-
-## Definition of Done
-
-- Avatar renders on page load
-- AG2 WebSocket `/session` connects automatically
-- OpenAI WebRTC P2P connection reaches "connected"
-- AI voice plays through the `<audio>` element
-- TalkingHead mouth lip-syncs via HeadAudio
-- DataChannel subtitles display and auto-clear
-- Reconnection triggers on failure, no page reload
-- Runs 3+ hours without crash or console errors
+**Port 3001 already in use**
+- Another app is using port 3001. Set a different port: `PORT=3002 npm start` and open `http://localhost:3002`
