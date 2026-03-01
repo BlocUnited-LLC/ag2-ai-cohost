@@ -37,20 +37,12 @@
 <script type='importmap'>
 {
   "imports": {
-    "three":          "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js/+esm",
-    "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "three":          "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
     "talkinghead":    "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.7/modules/talkinghead.mjs"
   }
 }
 </script>
-
-<!--
-  ag2client — AG2 WebRTC browser library (global: ag2client.WebRTC)
-  Handles WebSocket /session signaling + RTCPeerConnection to OpenAI.
-  Must load BEFORE webrtc.js.
-  https://github.com/ag2ai/ag2-js-client
--->
-<script src='https://github.com/ag2ai/ag2-js-client/releases/download/v0.2.0/index.global.js'></script>
 
 <!--
   All scripts are ES modules (deferred by default).

@@ -2,42 +2,31 @@
 
 (function () {
 
-  // ---------------------------------------------------------------------------
-  // Configuration
-  // Override window.COHOST_CONFIG.signalingBaseUrl before scripts load to point
-  // the browser at a different signaling host (e.g. for OBS scene with remote
-  // Express server).  Defaults to same origin (Express proxies to AG2 backend).
-  // ---------------------------------------------------------------------------
+  // ── Configuration ──────────────────────────────────────────────────────────
+  // Set window.COHOST_CONFIG.signalingBaseUrl before scripts load to point at
+  // a remote Express server (e.g. when running OBS on a different machine).
+  // Defaults to same origin so Express proxies /session to AG2.
   function signalingUrl() {
     var base = (window.COHOST_CONFIG && window.COHOST_CONFIG.signalingBaseUrl) || '';
-    if (base) {
-      // Convert http(s) → ws(s) if caller passed an HTTP URL
-      return base.replace(/^http/, 'ws').replace(/\/$/, '') + '/session';
-    }
-    var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-    return proto + location.host + '/session';
+    if (base) return base.replace(/^http/, 'ws').replace(/\/$/, '') + '/session';
+    return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/session';
   }
 
-  // ---------------------------------------------------------------------------
-  // Module state
-  // ---------------------------------------------------------------------------
-  var ag2webrtc      = null;   // ag2client.WebRTC instance
+  // ── Module state ────────────────────────────────────────────────────────────
+  var ws             = null;   // WebSocket to /session (AG2 signaling)
+  var pc             = null;   // RTCPeerConnection to OpenAI
   var reconnectTimer = null;
   var shuttingDown   = false;
   var subtitleTimer  = null;
 
-  // ---------------------------------------------------------------------------
-  // Subtitle overlay
-  // ---------------------------------------------------------------------------
+  // ── Subtitle overlay ────────────────────────────────────────────────────────
   function showSubtitle(text) {
     var el = document.getElementById('subtitle-overlay');
     if (!el) return;
     el.textContent = (typeof text === 'string') ? text : JSON.stringify(text);
     el.classList.add('visible');
     clearTimeout(subtitleTimer);
-    subtitleTimer = setTimeout(function () {
-      el.classList.remove('visible');
-    }, 6000);
+    subtitleTimer = setTimeout(function () { el.classList.remove('visible'); }, 6000);
   }
 
   function clearSubtitle() {
@@ -46,154 +35,148 @@
     if (el) el.classList.remove('visible');
   }
 
-  // ---------------------------------------------------------------------------
-  // Thinking indicator
-  // ---------------------------------------------------------------------------
+  // ── Thinking indicator ──────────────────────────────────────────────────────
   function setThinking(active) {
     var el = document.getElementById('thinking-indicator');
     if (!el) return;
-    if (active) {
-      el.classList.add('visible');
-    } else {
-      el.classList.remove('visible');
-    }
+    el.classList.toggle('visible', !!active);
   }
 
-  // ---------------------------------------------------------------------------
-  // DataChannel message dispatcher
-  // ---------------------------------------------------------------------------
+  // ── DataChannel messages ─────────────────────────────────────────────────────
   function handleDataMessage(raw) {
     var msg;
-    try {
-      msg = JSON.parse(raw);
-    } catch (_) {
+    try { msg = JSON.parse(raw); } catch (_) {
       console.warn('[WebRTC] Malformed DataChannel message (ignored):', raw);
       return;
     }
-
     console.debug('[WebRTC] DataChannel message:', msg);
-
     switch (msg.type) {
-      case 'subtitle':
-        showSubtitle(msg.payload);
-        break;
-      case 'thinking':
-        setThinking(msg.payload !== false);
-        break;
-      case 'event':
-        console.debug('[WebRTC] Event payload:', msg.payload);
-        break;
-      default:
-        console.debug('[WebRTC] Unknown message type:', msg.type);
+      case 'subtitle': showSubtitle(msg.payload);              break;
+      case 'thinking': setThinking(msg.payload !== false);     break;
+      case 'event':    console.debug('[WebRTC] Event:', msg.payload); break;
+      default:         console.debug('[WebRTC] Unknown type:', msg.type);
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Wire DataChannel handlers onto a channel object
-  // ---------------------------------------------------------------------------
   function attachDataChannel(ch) {
     ch.onmessage = function (e) { handleDataMessage(e.data); };
     ch.onerror   = function (e) { console.warn('[WebRTC] DataChannel error:', e); };
     ch.onclose   = function ()  { console.info('[WebRTC] DataChannel closed.'); };
   }
 
-  // ---------------------------------------------------------------------------
-  // Destroy existing ag2client.WebRTC instance cleanly
-  // ---------------------------------------------------------------------------
+  // ── Cleanup ─────────────────────────────────────────────────────────────────
   function destroyConnection() {
-    if (!ag2webrtc) return;
-    try {
-      if (typeof ag2webrtc.close === 'function')      ag2webrtc.close();
-      else if (typeof ag2webrtc.disconnect === 'function') ag2webrtc.disconnect();
-    } catch (_) {}
-    ag2webrtc = null;
+    if (ws) { try { ws.close(); } catch (_) {} ws = null; }
+    if (pc) {
+      pc.ontrack = pc.ondatachannel = pc.onconnectionstatechange = pc.oniceconnectionstatechange = null;
+      try { pc.close(); } catch (_) {}
+      pc = null;
+    }
     console.info('[WebRTC] Connection destroyed.');
   }
 
-  // ---------------------------------------------------------------------------
-  // Schedule reconnection attempt (2 s delay, no page reload)
-  // ---------------------------------------------------------------------------
+  // ── Reconnect ────────────────────────────────────────────────────────────────
   function scheduleReconnect() {
     if (shuttingDown) return;
     clearTimeout(reconnectTimer);
     console.info('[WebRTC] Scheduling reconnect in 2 s...');
     setThinking(false);
-    reconnectTimer = setTimeout(function () {
-      if (!shuttingDown) initWebRTC();
-    }, 2000);
+    reconnectTimer = setTimeout(function () { if (!shuttingDown) initWebRTC(); }, 2000);
   }
 
-  // ---------------------------------------------------------------------------
-  // Main: open ag2client.WebRTC → WebSocket /session → AG2 Python backend
-  //
-  // AG2 architecture (NOT POST /offer + /answer):
-  //   1. Browser opens WebSocket to /session (proxied by Express to AG2)
-  //   2. AG2 sends back ephemeral key + session config from OpenAI
-  //   3. ag2client creates RTCPeerConnection, sends SDP to OpenAI directly (P2P)
-  //   4. Audio is peer-to-peer: Browser ↔ OpenAI Realtime API
+  // ── Main connection flow ─────────────────────────────────────────────────────
+  // AG2 WebRTC architecture:
+  //   1. Browser opens WebSocket to /session (Express proxies to AG2 Python on 5050)
+  //   2. AG2 responds with OpenAI session config including an ephemeral key
+  //   3. Browser does WebRTC SDP exchange DIRECTLY with OpenAI using that key
+  //   4. Audio is P2P: Browser <-> OpenAI Realtime API
   //
   // Docs: https://docs.ag2.ai/latest/docs/user-guide/advanced-concepts/realtime-agent/webrtc/
-  // ---------------------------------------------------------------------------
   async function initWebRTC() {
     destroyConnection();
-
-    if (typeof ag2client === 'undefined' || typeof ag2client.WebRTC !== 'function') {
-      console.error('[WebRTC] ag2client not loaded — add CDN script to index.html.');
-      scheduleReconnect();
-      return;
-    }
-
     var url = signalingUrl();
-    console.info('[WebRTC] Connecting to AG2 via', url);
+    console.info('[WebRTC] Connecting to AG2 session at', url);
 
     try {
-      ag2webrtc = new ag2client.WebRTC(url);
+      // ── Step 1: Open WebSocket ──────────────────────────────────────────────
+      ws = new WebSocket(url);
+      await new Promise(function (resolve, reject) {
+        ws.onopen  = resolve;
+        ws.onerror = function () { reject(new Error('WebSocket connection failed')); };
+        setTimeout(function () { reject(new Error('WebSocket open timed out')); }, 10000);
+      });
 
-      // ── Remote audio track ──────────────────────────────────────────────────
-      ag2webrtc.ontrack = function (event) {
-        if (event.track && event.track.kind !== 'audio') return;
+      // ── Step 2: Wait for ephemeral key from AG2 ─────────────────────────────
+      var sessionData = await new Promise(function (resolve, reject) {
+        ws.onmessage = function (e) {
+          try {
+            var msg = JSON.parse(e.data);
+            // AG2 sends either type=session.created or wraps it in {type:"session",...}
+            if (msg.client_secret || (msg.session && msg.session.client_secret)) {
+              resolve(msg.session || msg);
+            }
+          } catch (_) {}
+        };
+        ws.onerror = function () { reject(new Error('WebSocket error waiting for session')); };
+        ws.onclose = function () { reject(new Error('WebSocket closed before session')); };
+        setTimeout(function () { reject(new Error('Session data timed out')); }, 15000);
+      });
+
+      var ephemeralKey = sessionData.client_secret && sessionData.client_secret.value;
+      if (!ephemeralKey) throw new Error('No ephemeral key in session: ' + JSON.stringify(sessionData));
+      var model = (sessionData.model || 'gpt-4o-mini-realtime-preview');
+      console.info('[WebRTC] Got ephemeral key, model:', model);
+
+      // ── Step 3: Create PeerConnection ───────────────────────────────────────
+      pc = new RTCPeerConnection();
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+
+      pc.ontrack = function (event) {
+        if (event.track.kind !== 'audio') return;
         var audioEl = document.getElementById('ai-audio');
         if (!audioEl) return;
-
-        var stream = event.streams ? event.streams[0] : event.stream;
-        audioEl.srcObject = stream;
+        audioEl.srcObject = event.streams[0];
         audioEl.play().catch(function (e) {
-          console.warn('[WebRTC] Audio play() suppressed (autoplay policy):', e.message);
+          console.warn('[WebRTC] Audio autoplay blocked:', e.message);
         });
+        if (typeof window.setupHeadAudio === 'function') window.setupHeadAudio(event.streams[0]);
+      };
 
-        // Feed remote MediaStream into HeadAudio for live lip-sync
-        if (typeof window.setupHeadAudio === 'function') {
-          window.setupHeadAudio(stream);
+      pc.ondatachannel = function (ev) { attachDataChannel(ev.channel); };
+
+      pc.onconnectionstatechange = function () {
+        console.debug('[WebRTC] Connection state:', pc.connectionState);
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+          destroyConnection(); scheduleReconnect();
         }
       };
 
-      // ── DataChannel ─────────────────────────────────────────────────────────
-      ag2webrtc.ondatachannel = function (event) {
-        attachDataChannel(event.channel);
-      };
-
-      // ── Connection state ────────────────────────────────────────────────────
-      ag2webrtc.onconnectionstatechange = function () {
-        var state = ag2webrtc.connectionState;
-        console.debug('[WebRTC] Connection state:', state);
-        if (state === 'failed' || state === 'disconnected' || state === 'closed') {
-          destroyConnection();
-          scheduleReconnect();
+      pc.oniceconnectionstatechange = function () {
+        console.debug('[WebRTC] ICE state:', pc.iceConnectionState);
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+          destroyConnection(); scheduleReconnect();
         }
       };
 
-      // ── Connect ─────────────────────────────────────────────────────────────
-      await ag2webrtc.connect();
+      // ── Step 4: SDP offer → OpenAI ──────────────────────────────────────────
+      var offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-      // Some versions of ag2client expose the underlying RTCPeerConnection.
-      // If ondatachannel was not triggered via the wrapper, hook it directly.
-      var rawPc = ag2webrtc.peerConnection || ag2webrtc.pc || null;
-      if (rawPc && !ag2webrtc._datachannel_hooked) {
-        rawPc.ondatachannel = function (event) { attachDataChannel(event.channel); };
-        ag2webrtc._datachannel_hooked = true;
-      }
+      var sdpResponse = await fetch(
+        'https://api.openai.com/v1/realtime?model=' + encodeURIComponent(model),
+        {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + ephemeralKey, 'Content-Type': 'application/sdp' },
+          body: offer.sdp
+        }
+      );
+      if (!sdpResponse.ok) throw new Error('OpenAI SDP exchange failed: HTTP ' + sdpResponse.status);
 
-      console.info('[WebRTC] AG2 WebRTC session established.');
+      var answerSdp = await sdpResponse.text();
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+
+      console.info('[WebRTC] WebRTC P2P connection to OpenAI established.');
+
     } catch (err) {
       console.error('[WebRTC] Connection failed:', err);
       destroyConnection();
@@ -201,277 +184,8 @@
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Public API
-  // ---------------------------------------------------------------------------
-  window.initWebRTC = initWebRTC;
-
-  // Call to permanently shut down (e.g. pagehide event)
-  window.destroyWebRTC = function () {
-    shuttingDown = true;
-    clearTimeout(reconnectTimer);
-    destroyConnection();
-    clearSubtitle();
-    setThinking(false);
-  };
-
-}());
-
-  // ---------------------------------------------------------------------------
-  // Subtitle overlay
-  // ---------------------------------------------------------------------------
-  function showSubtitle(text) {
-    var el = document.getElementById('subtitle-overlay');
-    if (!el) return;
-    el.textContent = (typeof text === 'string') ? text : JSON.stringify(text);
-    el.classList.add('visible');
-    clearTimeout(subtitleTimer);
-    subtitleTimer = setTimeout(function () {
-      el.classList.remove('visible');
-    }, 6000);
-  }
-
-  function clearSubtitle() {
-    clearTimeout(subtitleTimer);
-    var el = document.getElementById('subtitle-overlay');
-    if (el) el.classList.remove('visible');
-  }
-
-  // ---------------------------------------------------------------------------
-  // Thinking indicator
-  // ---------------------------------------------------------------------------
-  function setThinking(active) {
-    var el = document.getElementById('thinking-indicator');
-    if (!el) return;
-    if (active) {
-      el.classList.add('visible');
-    } else {
-      el.classList.remove('visible');
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // DataChannel message dispatcher
-  // ---------------------------------------------------------------------------
-  function handleDataMessage(raw) {
-    var msg;
-    try {
-      msg = JSON.parse(raw);
-    } catch (_) {
-      console.warn('[WebRTC] Malformed DataChannel message (ignored):', raw);
-      return;
-    }
-
-    console.debug('[WebRTC] DataChannel message:', msg);
-
-    switch (msg.type) {
-      case 'subtitle':
-        showSubtitle(msg.payload);
-        break;
-      case 'thinking':
-        setThinking(msg.payload !== false);
-        break;
-      case 'event':
-        console.debug('[WebRTC] Event payload:', msg.payload);
-        break;
-      default:
-        console.debug('[WebRTC] Unknown message type:', msg.type);
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Destroy existing PeerConnection cleanly
-  // ---------------------------------------------------------------------------
-  function destroyConnection() {
-    if (!pc) return;
-    pc.oniceconnectionstatechange = null;
-    pc.onconnectionstatechange    = null;
-    pc.onicegatheringstatechange  = null;
-    pc.ontrack                    = null;
-    pc.ondatachannel              = null;
-    try { pc.close(); } catch (_) {}
-    pc = null;
-    console.info('[WebRTC] PeerConnection destroyed.');
-  }
-
-  // ---------------------------------------------------------------------------
-  // Schedule reconnection attempt (2 s delay, no page reload)
-  // ---------------------------------------------------------------------------
-  function scheduleReconnect() {
-    if (shuttingDown) return;
-    clearTimeout(reconnectTimer);
-    console.info('[WebRTC] Scheduling reconnect in 2 s...');
-    setThinking(false);
-    reconnectTimer = setTimeout(function () {
-      if (!shuttingDown) initWebRTC();
-    }, 2000);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Wait until ICE gathering is complete before sending the answer.
-  // Resolves immediately if already complete; safety-exits after 8 s.
-  // ---------------------------------------------------------------------------
-  function waitForIceGathering(peerConn) {
-    return new Promise(function (resolve) {
-      if (peerConn.iceGatheringState === 'complete') {
-        resolve();
-        return;
-      }
-      var timeout = setTimeout(function () {
-        peerConn.removeEventListener('icegatheringstatechange', onState);
-        console.warn('[WebRTC] ICE gathering timed out — sending partial candidates.');
-        resolve();
-      }, 8000);
-
-      function onState() {
-        if (peerConn.iceGatheringState === 'complete') {
-          clearTimeout(timeout);
-          peerConn.removeEventListener('icegatheringstatechange', onState);
-          resolve();
-        }
-      }
-      peerConn.addEventListener('icegatheringstatechange', onState);
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Main: full signaling + connection setup
-  // AG2 is the *offerer*; browser is the *answerer*.
-  //
-  // Flow:
-  //   1. POST /offer          → receive AG2's SDP offer
-  //   2. setRemoteDescription (offer)
-  //   3. createAnswer
-  //   4. setLocalDescription  (answer)
-  //   5. wait for ICE gathering complete
-  //   6. POST /answer         → send our SDP answer with gathered candidates
-  // ---------------------------------------------------------------------------
-  async function initWebRTC() {
-    destroyConnection();
-
-    var base = signalingBase();
-
-    // ── Step 1: Fetch SDP offer from AG2 ──────────────────────────────────────
-    var offerSdp;
-    try {
-      var offerRes = await fetch(base + '/offer', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    '{}'
-      });
-      if (!offerRes.ok) throw new Error('HTTP ' + offerRes.status);
-      var offerJson = await offerRes.json();
-      // Accept both { sdp: "..." } and bare SDP string
-      offerSdp = (offerJson && offerJson.sdp) ? offerJson.sdp : offerJson;
-    } catch (err) {
-      console.error('[WebRTC] Failed to fetch offer:', err);
-      scheduleReconnect();
-      return;
-    }
-
-    // ── Step 2: Create RTCPeerConnection ──────────────────────────────────────
-    pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    });
-
-    // ── Step 3: Connection health monitoring ──────────────────────────────────
-    pc.oniceconnectionstatechange = function () {
-      console.debug('[WebRTC] ICE connection state:', pc.iceConnectionState);
-      if (pc.iceConnectionState === 'failed' ||
-          pc.iceConnectionState === 'disconnected' ||
-          pc.iceConnectionState === 'closed') {
-        destroyConnection();
-        scheduleReconnect();
-      }
-    };
-
-    pc.onconnectionstatechange = function () {
-      console.debug('[WebRTC] Peer connection state:', pc.connectionState);
-      if (pc.connectionState === 'failed' ||
-          pc.connectionState === 'disconnected' ||
-          pc.connectionState === 'closed') {
-        destroyConnection();
-        scheduleReconnect();
-      }
-    };
-
-    // ── Step 4: Incoming remote audio track ───────────────────────────────────
-    pc.ontrack = function (event) {
-      if (event.track.kind !== 'audio') return;
-      var audioEl = document.getElementById('ai-audio');
-      if (!audioEl) return;
-
-      // Replace srcObject on renegotiation without creating a new element
-      audioEl.srcObject = event.streams[0];
-      audioEl.play().catch(function (e) {
-        console.warn('[WebRTC] Audio play() suppressed (autoplay policy):', e.message);
-      });
-
-      // Wire remote MediaStream into HeadAudio for real-time lip-sync.
-      // setupHeadAudio is defined by avatar.js; it is safe to call on reconnect.
-      if (typeof window.setupHeadAudio === 'function') {
-        window.setupHeadAudio(event.streams[0]);
-      }
-    };
-
-    // ── Step 5: Incoming DataChannel ──────────────────────────────────────────
-    pc.ondatachannel = function (event) {
-      var ch = event.channel;
-      ch.onmessage = function (e) { handleDataMessage(e.data); };
-      ch.onerror   = function (e) { console.warn('[WebRTC] DataChannel error:', e); };
-      ch.onclose   = function ()  { console.info('[WebRTC] DataChannel closed.'); };
-    };
-
-    // ── Step 6: Set AG2's offer as remote description ─────────────────────────
-    try {
-      await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
-    } catch (err) {
-      console.error('[WebRTC] setRemoteDescription failed:', err);
-      destroyConnection();
-      scheduleReconnect();
-      return;
-    }
-
-    // ── Step 7: Create and set local answer ───────────────────────────────────
-    var answer;
-    try {
-      answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-    } catch (err) {
-      console.error('[WebRTC] createAnswer/setLocalDescription failed:', err);
-      destroyConnection();
-      scheduleReconnect();
-      return;
-    }
-
-    // ── Step 8: Wait for full ICE gathering ───────────────────────────────────
-    await waitForIceGathering(pc);
-
-    // ── Step 9: POST completed answer (with embedded ICE candidates) ──────────
-    try {
-      var answerRes = await fetch(base + '/answer', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          type: pc.localDescription.type,
-          sdp:  pc.localDescription.sdp
-        })
-      });
-      if (!answerRes.ok) throw new Error('HTTP ' + answerRes.status);
-      console.info('[WebRTC] Signaling complete — WebRTC session established.');
-    } catch (err) {
-      console.error('[WebRTC] Failed to POST answer:', err);
-      destroyConnection();
-      scheduleReconnect();
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Public API
-  // ---------------------------------------------------------------------------
-  window.initWebRTC = initWebRTC;
-
-  // Call to permanently shut down (e.g. when tab is hidden for a long time)
+  // ── Public API ───────────────────────────────────────────────────────────────
+  window.initWebRTC   = initWebRTC;
   window.destroyWebRTC = function () {
     shuttingDown = true;
     clearTimeout(reconnectTimer);
