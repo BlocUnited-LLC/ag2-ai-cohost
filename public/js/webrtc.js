@@ -112,6 +112,23 @@
     console.info('[WebRTC] Connecting to AG2 session at', url);
 
     try {
+      // ── Intercept RTCPeerConnection before ag2client creates one ──────────────
+      // ag2client doesn't expose its internal PC via a public property, so we
+      // monkey-patch the constructor to capture it the moment it's instantiated.
+      var interceptedPc = null;
+      var OrigRTCPC = window.RTCPeerConnection;
+      window.RTCPeerConnection = function (config, constraints) {
+        var pc = new OrigRTCPC(config, constraints);
+        interceptedPc = pc;
+        console.info('[WebRTC] RTCPeerConnection intercepted for lip-sync.');
+        // Hook immediately so we never miss the 'track' event
+        hookAudio(pc);
+        return pc;
+      };
+      // Copy static members so ag2client's instanceof checks still pass
+      Object.setPrototypeOf(window.RTCPeerConnection, OrigRTCPC);
+      window.RTCPeerConnection.prototype = OrigRTCPC.prototype;
+
       agWebRTC = new ag2client.WebRTC(url);
 
       // Disconnect handler — triggers reconnect
@@ -124,13 +141,12 @@
       // Connect — this: opens WS, exchanges SDP with OpenAI via AG2, enables mic
       await agWebRTC.connect();
 
-      // After connect, tap into the underlying RTCPeerConnection for audio/DataChannel
-      var rawPc = agWebRTC.peerConnection || agWebRTC.pc || agWebRTC._pc || null;
-      hookAudio(rawPc);
+      // Restore the real RTCPeerConnection constructor
+      window.RTCPeerConnection = OrigRTCPC;
 
-      // If the track was already received before we hooked, grab it now
-      if (rawPc) {
-        rawPc.getReceivers().forEach(function (receiver) {
+      // Fallback: if intercept fired after connect, check receivers now
+      if (interceptedPc) {
+        interceptedPc.getReceivers().forEach(function (receiver) {
           if (receiver.track && receiver.track.kind === 'audio') {
             var stream = new MediaStream([receiver.track]);
             var audioEl = document.getElementById('ai-audio');
