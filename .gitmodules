@@ -1,0 +1,3 @@
+[submodule "ag2-backend"]
+	path = ag2-backend
+	url = https://github.com/ag2ai/realtime-agent-over-webrtc.git

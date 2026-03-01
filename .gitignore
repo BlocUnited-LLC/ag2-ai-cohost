@@ -1,5 +1,6 @@
 node_modules/
 .env
 
-# AG2 Python backend — cloned separately, not part of this repo
-ag2-backend/
+# Python venv inside the ag2-backend submodule — never commit this
+ag2-backend/.venv/
+ag2-backend/OAI_CONFIG_LIST
