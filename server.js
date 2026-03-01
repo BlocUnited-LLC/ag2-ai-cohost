@@ -16,7 +16,10 @@ const AG2_BACKEND_URL = (process.env.AG2_BACKEND_URL || 'http://localhost:5050')
 
 // Serve .mjs files as JavaScript — some Express/mime versions omit this type,
 // which causes AudioWorklet addModule() to throw an AbortError.
-express.static.mime.define({ 'text/javascript': ['mjs'] });
+app.use((req, res, next) => {
+  if (req.path.endsWith('.mjs')) res.setHeader('Content-Type', 'text/javascript');
+  next();
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
