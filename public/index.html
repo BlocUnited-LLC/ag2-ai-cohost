@@ -45,6 +45,14 @@
 </script>
 
 <!--
+  ag2client — AG2 WebRTC browser library (global: ag2client.WebRTC)
+  Handles WebSocket /session signaling + RTCPeerConnection to OpenAI.
+  Must load BEFORE webrtc.js.
+  https://github.com/ag2ai/ag2-js-client
+-->
+<script src='https://github.com/ag2ai/ag2-js-client/releases/download/v0.2.0/index.global.js'></script>
+
+<!--
   All scripts are ES modules (deferred by default).
   Execution order is document order, which guarantees:
     1. avatar.js  — defines window.initAvatar + window.setupHeadAudio
