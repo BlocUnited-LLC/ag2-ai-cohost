@@ -77,6 +77,20 @@ Then open **http://localhost:3001** in Chrome or Edge.
 3. Allow microphone access when the browser prompts you.
 4. Start talking. The AI will respond and the avatar's mouth will move.
 
+### Mic mute toggle
+
+Press **`M`** to mute/unmute your mic to the AI. When muted:
+- A red **"MIC OFF"** indicator appears in the top-left corner
+- The AI hears silence — the WebRTC connection stays alive
+- Press **`M`** again to unmute instantly
+
+You can also control this programmatically from the browser console:
+```js
+window.toggleMic()          // toggle
+window.setMicMuted(true)    // mute
+window.setMicMuted(false)   // unmute
+```
+
 ---
 
 ## Using with OBS
@@ -92,20 +106,27 @@ Then open **http://localhost:3001** in Chrome or Edge.
 
 ## Customising the AI persona
 
-The AI's name, personality, and opening line are defined in `ag2-config/main.py`. Edit the `system_message` field to change how the AI behaves, then restart Terminal 1.
+The AI's name, personality, and opening line are defined in `ag2-backend/realtime_over_webrtc/main.py`. Edit the `system_message` field to change how the AI behaves, then restart Terminal 1.
 
 ---
 
-## Keeping the AI backend up to date
+## Tool / function calling
 
-The `ag2-backend/` folder is a Git submodule pointing to the [AG2 upstream repo](https://github.com/ag2ai/realtime-agent-over-webrtc). To pull the latest changes:
+The AI cohost can perform actions via AG2 tool integrations registered in `ag2-backend/realtime_over_webrtc/main.py`:
 
-```bash
-git submodule update --remote ag2-backend
-npm run setup
-```
+| Tool | Description |
+|---|---|
+| `timeout_user(username, duration)` | Timeout a chat user |
+| `ban_user(username)` | Permanently ban a user |
+| `delete_message(message_id)` | Delete a chat message |
+| `change_stream_title(title)` | Update the stream title |
+| `trigger_overlay(animation)` | Trigger an OBS overlay |
+| `play_sound(sound_name)` | Play a sound effect |
+| `subscribe_to_newsletter(email)` | Subscribe to the BlocUnited newsletter |
 
-`npm run setup` re-applies your custom `main.py` after the update.
+Tool implementations are in `ag2-backend/tools/`. Replace the placeholder functions with your actual platform APIs (Twitch, Kick, YouTube, etc.).
+
+The safety allow-list in `ag2-backend/tools/safety.py` controls which tools the agent is permitted to call.
 
 ---
 
