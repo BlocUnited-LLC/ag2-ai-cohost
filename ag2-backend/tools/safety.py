@@ -9,6 +9,7 @@ ALLOWED_ACTIONS = [
     "delete_message",
     "trigger_overlay",
     "play_sound",
+    "subscribe_to_newsletter",
 ]
 
 
