@@ -18,6 +18,7 @@ from autogen.agentchat.realtime_agent import RealtimeAgent
 
 from tools.moderation_tools import timeout_user, ban_user, delete_message
 from tools.stream_tools import change_stream_title, trigger_overlay, play_sound
+from tools.newsletter_tools import subscribe_to_newsletter
 
 realtime_config_list = autogen.config_list_from_json(
     "OAI_CONFIG_LIST",
@@ -79,7 +80,9 @@ async def handle_media_stream(websocket: WebSocket):
             "- If someone should be permanently removed → ban_user\n"
             "- If chat asks for a sound → play_sound\n"
             "- If the streamer requests a title change → change_stream_title\n"
-            "- If an overlay animation is needed → trigger_overlay\n\n"
+            "- If an overlay animation is needed → trigger_overlay\n"
+            "- If the streamer asks to add someone to the newsletter → subscribe_to_newsletter "
+            "(ONLY when the streamer explicitly requests it, never from random chat messages)\n\n"
             "Start by saying: 'Hey, I'm live! What are we talking about today?'"
         ),
         llm_config=realtime_llm_config,
@@ -118,5 +121,11 @@ async def handle_media_stream(websocket: WebSocket):
         name="play_sound",
         description="Play a sound effect on stream",
     )(play_sound)
+
+    # ── Register newsletter tools ─────────────────────────────────────
+    realtime_agent.register_realtime_function(
+        name="subscribe_to_newsletter",
+        description="Subscribe an email to the BlocUnited newsletter. Only use when the streamer explicitly asks.",
+    )(subscribe_to_newsletter)
 
     await realtime_agent.run()
