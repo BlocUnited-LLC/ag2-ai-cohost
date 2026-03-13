@@ -15,6 +15,37 @@
   var reconnectTimer = null;
   var shuttingDown   = false;
   var subtitleTimer  = null;
+  var peerConnection = null;   // captured RTCPeerConnection for mic control
+  var micMuted       = false;  // current mute state
+
+  // ── Mic mute toggle ──────────────────────────────────────────────────────────
+  // Disables outgoing audio tracks on the RTCPeerConnection so OpenAI hears
+  // silence. The WebRTC connection stays alive — she just can't hear you.
+  function setMicMuted(muted) {
+    micMuted = !!muted;
+    if (peerConnection) {
+      peerConnection.getSenders().forEach(function (sender) {
+        if (sender.track && sender.track.kind === 'audio') {
+          sender.track.enabled = !micMuted;
+        }
+      });
+    }
+    // Update UI indicator
+    var el = document.getElementById('mic-mute-indicator');
+    if (el) el.classList.toggle('visible', micMuted);
+    console.info('[WebRTC] Mic ' + (micMuted ? 'MUTED' : 'UNMUTED'));
+  }
+
+  function toggleMic() {
+    setMicMuted(!micMuted);
+  }
+
+  // ── Keyboard shortcut: press M to toggle mic ─────────────────────────────────
+  document.addEventListener('keydown', function (e) {
+    // Ignore if typing in an input field
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'm' || e.key === 'M') toggleMic();
+  });
 
   // ── Subtitle overlay ─────────────────────────────────────────────────────────
   function showSubtitle(text) {
@@ -120,6 +151,7 @@
       window.RTCPeerConnection = function (config, constraints) {
         var pc = new OrigRTCPC(config, constraints);
         interceptedPc = pc;
+        peerConnection = pc;  // store at module scope for mic mute control
         console.info('[WebRTC] RTCPeerConnection intercepted for lip-sync.');
         // Hook immediately so we never miss the 'track' event
         hookAudio(pc);
@@ -161,6 +193,9 @@
       }
 
       console.info('[WebRTC] Connected. You can now speak to the AI co-host.');
+
+      // If mic was muted before reconnect, re-apply mute state
+      if (micMuted) setMicMuted(true);
     } catch (err) {
       console.error('[WebRTC] Connection failed:', err);
       destroyConnection();
@@ -169,7 +204,9 @@
   }
 
   // ── Public API ────────────────────────────────────────────────────────────────
-  window.initWebRTC   = initWebRTC;
+  window.initWebRTC    = initWebRTC;
+  window.toggleMic     = toggleMic;
+  window.setMicMuted   = setMicMuted;
   window.destroyWebRTC = function () {
     shuttingDown = true;
     clearTimeout(reconnectTimer);
