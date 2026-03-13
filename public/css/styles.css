@@ -71,6 +71,30 @@ html, body {
     opacity: 1;
 }
 
+/* ── Mic mute indicator ───────────────────────────────────────────────────────
+   Shows "MIC OFF" in the top-left corner when the mic is muted.
+   Toggled via the M key or window.toggleMic().
+   ──────────────────────────────────────────────────────────────────────── */
+#mic-mute-indicator {
+    position:        fixed;
+    top:             18px;
+    left:            22px;
+    color:           #ff4444;
+    font-family:     'Segoe UI', Arial, sans-serif;
+    font-size:       0.95em;
+    font-weight:     600;
+    letter-spacing:  0.03em;
+    text-shadow:     0 1px 4px rgba(0, 0, 0, 0.7);
+    opacity:         0;
+    transition:      opacity 0.3s ease;
+    pointer-events:  none;
+    z-index:         200;
+}
+
+#mic-mute-indicator.visible {
+    opacity: 1;
+}
+
 /* ── Click-to-start overlay ──────────────────────────────────────────────────
    Chrome blocks AudioContext before a user gesture. This overlay is shown on
    load and hidden once the user clicks — resuming the AudioContext and
