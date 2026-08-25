@@ -40,7 +40,11 @@
   to point at a remote signaling server:
 
   <script>
-    window.COHOST_CONFIG = { signalingBaseUrl: 'http://192.168.1.100:3000' };
+    window.COHOST_CONFIG = {
+      signalingBaseUrl: 'http://192.168.1.100:3000',
+      bargeInEnabled: true,
+      bargeInThreshold: 0.025
+    };
   </script>
 -->
 

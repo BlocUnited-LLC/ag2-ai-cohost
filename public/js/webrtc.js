@@ -15,8 +15,19 @@
   var micSource = null;
   var micProcessor = null;
   var outputDestination = null;
-  var nextPlaybackTime = 0;
+  var pcmPlayer = null;
+  var fallbackNextPlaybackTime = 0;
+  var fallbackSources = new Set();
   var micMuted = false;
+  var localSpeechActive = false;
+  var speechFrames = 0;
+  var silenceFrames = 0;
+  var suppressPlaybackUntil = 0;
+
+  function cohostSetting(name, fallback) {
+    var config = window.COHOST_CONFIG || {};
+    return config[name] === undefined ? fallback : config[name];
+  }
 
   function sessionUrl() {
     var base = (window.COHOST_CONFIG && window.COHOST_CONFIG.signalingBaseUrl) || '';
@@ -72,6 +83,41 @@
     return buffer;
   }
 
+  function monitorLocalSpeech(samples) {
+    if (!cohostSetting('bargeInEnabled', true) || micMuted) return;
+
+    var energy = 0;
+    for (var i = 0; i < samples.length; i += 1) energy += samples[i] * samples[i];
+    var rms = Math.sqrt(energy / Math.max(1, samples.length));
+    var threshold = Number(cohostSetting('bargeInThreshold', 0.025));
+    var now = performance.now();
+
+    if (rms >= threshold) {
+      speechFrames += 1;
+      silenceFrames = 0;
+      if (speechFrames >= 2) {
+        // OpenAI cancels the response server-side. Clearing locally prevents audio
+        // already buffered in Chrome from continuing to talk over the user.
+        suppressPlaybackUntil = now + 750;
+        if (!localSpeechActive) {
+          localSpeechActive = true;
+          clearPlayback();
+          console.info('[LiveAudio] User speech detected; interrupting playback.');
+        }
+      }
+      return;
+    }
+
+    speechFrames = 0;
+    if (localSpeechActive) {
+      silenceFrames += 1;
+      if (silenceFrames >= 5) {
+        localSpeechActive = false;
+        silenceFrames = 0;
+      }
+    }
+  }
+
   async function ensureAudio() {
     if (audioContext) return;
 
@@ -88,6 +134,25 @@
     audioContext = new AudioContextClass();
     outputDestination = audioContext.createMediaStreamDestination();
 
+    try {
+      await audioContext.audioWorklet.addModule('/js/pcm-player-worklet.js');
+      pcmPlayer = new AudioWorkletNode(audioContext, 'pcm-player', {
+        outputChannelCount: [1],
+        processorOptions: {
+          inputSampleRate: TARGET_SAMPLE_RATE,
+          // Realtime commonly delivers generated audio faster than wall-clock
+          // playback. Keep a modest startup cushion and retain the full response;
+          // interruption events explicitly clear speech that is no longer wanted.
+          prebufferMs: 200,
+          maxBufferMs: 120000
+        }
+      });
+      pcmPlayer.connect(outputDestination);
+    } catch (err) {
+      pcmPlayer = null;
+      console.warn('[LiveAudio] AudioWorklet unavailable; using scheduled-buffer fallback.', err);
+    }
+
     var audioEl = document.getElementById('ai-audio');
     if (audioEl) {
       audioEl.srcObject = outputDestination.stream;
@@ -98,10 +163,12 @@
     }
 
     micSource = audioContext.createMediaStreamSource(micStream);
-    micProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+    micProcessor = audioContext.createScriptProcessor(2048, 1, 1);
     micProcessor.onaudioprocess = function (event) {
       if (!ready || micMuted || !socket || socket.readyState !== WebSocket.OPEN) return;
-      var pcm = downsampleToPcm16(event.inputBuffer.getChannelData(0), audioContext.sampleRate);
+      var samples = event.inputBuffer.getChannelData(0);
+      monitorLocalSpeech(samples);
+      var pcm = downsampleToPcm16(samples, audioContext.sampleRate);
       socket.send(pcm);
     };
     micSource.connect(micProcessor);
@@ -123,6 +190,12 @@
 
   function playPcm(arrayBuffer) {
     if (!audioContext || !outputDestination || !arrayBuffer.byteLength) return;
+    if (performance.now() < suppressPlaybackUntil) return;
+    if (pcmPlayer) {
+      pcmPlayer.port.postMessage({ type: 'audio', buffer: arrayBuffer }, [arrayBuffer]);
+      return;
+    }
+
     var pcm = new Int16Array(arrayBuffer);
     var audioBuffer = audioContext.createBuffer(1, pcm.length, TARGET_SAMPLE_RATE);
     var channel = audioBuffer.getChannelData(0);
@@ -131,9 +204,20 @@
     var source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(outputDestination);
-    var startAt = Math.max(audioContext.currentTime + 0.01, nextPlaybackTime);
+    fallbackSources.add(source);
+    source.onended = function () { fallbackSources.delete(source); };
+    var startAt = Math.max(audioContext.currentTime + 0.08, fallbackNextPlaybackTime);
     source.start(startAt);
-    nextPlaybackTime = startAt + audioBuffer.duration;
+    fallbackNextPlaybackTime = startAt + audioBuffer.duration;
+  }
+
+  function clearPlayback() {
+    if (pcmPlayer) pcmPlayer.port.postMessage({ type: 'clear' });
+    fallbackSources.forEach(function (source) {
+      try { source.stop(); } catch (_) {}
+    });
+    fallbackSources.clear();
+    fallbackNextPlaybackTime = audioContext ? audioContext.currentTime : 0;
   }
 
   function handleControl(raw) {
@@ -142,10 +226,18 @@
     switch (message.type) {
       case 'ready':
         ready = true;
+        localSpeechActive = false;
+        speechFrames = 0;
+        silenceFrames = 0;
+        suppressPlaybackUntil = 0;
         console.info('[LiveAudio] AG2 LiveAgent session ready.');
         break;
       case 'subtitle': showSubtitle(message.payload || ''); break;
       case 'thinking': setThinking(message.payload !== false); break;
+      case 'audio_interrupted':
+        suppressPlaybackUntil = performance.now() + 250;
+        clearPlayback();
+        break;
       case 'error': console.error('[LiveAudio] Backend error:', message.message); break;
     }
   }
@@ -174,6 +266,7 @@
       };
       socket.onclose = function () {
         ready = false;
+        clearPlayback();
         setThinking(false);
         console.warn('[LiveAudio] Session disconnected; reconnecting.');
         scheduleReconnect();
@@ -196,6 +289,7 @@
       socket.close();
       socket = null;
     }
+    clearPlayback();
     if (micProcessor) micProcessor.disconnect();
     if (micSource) micSource.disconnect();
     if (micStream) micStream.getTracks().forEach(function (track) { track.stop(); });
@@ -204,8 +298,13 @@
     micSource = null;
     micStream = null;
     outputDestination = null;
+    pcmPlayer = null;
     audioContext = null;
-    nextPlaybackTime = 0;
+    fallbackNextPlaybackTime = 0;
+    localSpeechActive = false;
+    speechFrames = 0;
+    silenceFrames = 0;
+    suppressPlaybackUntil = 0;
   }
 
   window.initLiveAudio = initLiveAudio;

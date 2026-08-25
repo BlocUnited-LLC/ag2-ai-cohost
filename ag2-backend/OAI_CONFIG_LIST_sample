@@ -3,17 +3,27 @@
         "model": "gpt-realtime-2",
         "api_key": "<your OpenAI API key here>",
         "voice": "coral",
-        "company_name": "BlocUnited",
-        "company_website": "https://blocunited.com/",
-        "products": [
-            {
-                "name": "Mozaiks",
-                "description": "An open-source AI app factory for building, running, and iterating on AI-native software products.",
-                "website": "https://www.mozaiks.ai/",
-                "documentation": "https://docs.mozaiks.ai/",
-                "repository": "https://github.com/BlocUnited-LLC/mozaiks"
-            }
-        ],
+        "agent_prompt": "You are a warm, curious AI cohost. Have a natural conversation and answer whatever the user wants to know. Be concise but useful, point out practical value when it helps, and ask thoughtful follow-up questions without sounding scripted. Start by saying: 'Hey, I'm live! What are we talking about today?'",
+        "contacts": {
+            "primary": {
+                "name": "BlocUnited",
+                "context": "BlocUnited is the team behind Mozaiks and builds open-source tools for creating AI-native software.",
+                "websites": [
+                    "https://blocunited.com/"
+                ]
+            },
+            "secondary": [
+                {
+                    "name": "Mozaiks",
+                    "context": "Mozaiks is an open-source AI app factory that helps people build, run, and improve AI-native software in one workflow. Its value is helping teams move from an idea to a working product faster while keeping the flexibility and control of an open-source platform.",
+                    "websites": [
+                        "https://www.mozaiks.ai/",
+                        "https://docs.mozaiks.ai/",
+                        "https://github.com/BlocUnited-LLC/mozaiks"
+                    ]
+                }
+            ]
+        },
         "web_search_model": "gpt-5-mini",
         "web_search_limit": 10
     }

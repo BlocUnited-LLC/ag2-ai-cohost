@@ -127,28 +127,44 @@ The AI cohost can perform actions through tools passed to `LiveAgent` in `ag2-ba
 
 Tool implementations are in `ag2-backend/tools/`. Replace the placeholder functions with your actual platform APIs (Twitch, Kick, YouTube, etc.).
 
-Company identity and web search are modular settings in `ag2-backend/OAI_CONFIG_LIST`:
+Agent context and web search are modular settings in `ag2-backend/OAI_CONFIG_LIST`:
 
 ```json
-"company_name": "BlocUnited",
-"company_website": "https://blocunited.com/",
-"products": [
-  {
-    "name": "Mozaiks",
-    "description": "An open-source AI app factory for building, running, and iterating on AI-native software products.",
-    "website": "https://www.mozaiks.ai/",
-    "documentation": "https://docs.mozaiks.ai/",
-    "repository": "https://github.com/BlocUnited-LLC/mozaiks"
-  }
-],
+"agent_prompt": "You are a warm, curious AI cohost. Have a natural conversation and answer whatever the user wants to know. Be concise but useful, point out practical value when it helps, and ask thoughtful follow-up questions without sounding scripted.",
+"contacts": {
+  "primary": {
+    "name": "BlocUnited",
+    "context": "BlocUnited is the team behind Mozaiks and builds open-source tools for creating AI-native software.",
+    "websites": ["https://blocunited.com/"]
+  },
+  "secondary": [
+    {
+      "name": "Mozaiks",
+      "context": "Mozaiks is an open-source AI app factory that helps people move from an idea to working AI-native software faster while retaining the flexibility and control of an open-source platform.",
+      "websites": [
+        "https://www.mozaiks.ai/",
+        "https://docs.mozaiks.ai/",
+        "https://github.com/BlocUnited-LLC/mozaiks"
+      ]
+    }
+  ]
+},
 "web_search_model": "gpt-5-mini",
 "web_search_limit": 10
 ```
 
-Change the company fields to reuse the cohost for another organization. Add any
-number of entries to `products`; the agent will use each product's official sources
-when researching it. The search limit applies per voice session and helps control
-API usage.
+`agent_prompt` controls the cohost's identity, tone, and general conversational
+behavior. Tool capabilities and their safety rules remain attached by the application,
+so this field can stay focused on the experience you want the agent to create.
+
+The schema is intentionally small and deterministic: every contact has `name`,
+`context`, and `websites`. Write `context` as natural background knowledge, including
+the value propositions the cohost should understand. `websites` is an ordinary array,
+so it can contain any number or type of relevant page without assigning fixed roles
+such as documentation or repository. `primary` identifies the central subject and
+`secondary` accepts any number of additional subjects. These labels organize config;
+the cohost does not say them aloud or force contacts into unrelated conversations.
+The search limit applies per voice session and helps control API usage.
 
 The safety allow-list in `ag2-backend/tools/safety.py` controls which tools the agent is permitted to call.
 
@@ -168,6 +184,12 @@ The safety allow-list in `ag2-backend/tools/safety.py` controls which tools the 
 **Avatar mouth doesn't move**
 - Open the browser DevTools console (F12) and look for `[Avatar] HeadAudio lip-sync active.`
 - If you see an error instead, try refreshing the page and clicking **▶ Click to Start** again
+
+**The agent does not stop when I speak**
+- Barge-in is enabled by default: OpenAI semantic VAD cancels the response and the browser immediately clears queued speech
+- Use headphones when possible so speaker output does not leak back into the microphone
+- If your voice is too quiet to trigger local interruption, set `bargeInThreshold` lower than `0.025` in `window.COHOST_CONFIG`; raise it if background noise causes false interruptions
+- After changing frontend audio settings, hard-refresh with `Ctrl+Shift+R`
 
 **Port 3001 already in use**
 - Another app is using port 3001. Set a different port: `PORT=3002 npm start` and open `http://localhost:3002`

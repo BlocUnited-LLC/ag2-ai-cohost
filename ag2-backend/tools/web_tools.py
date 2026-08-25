@@ -23,9 +23,9 @@ def create_web_search_tool(
         """Search the public internet for current, factual information.
 
         Use this for current events, recent facts, unfamiliar organizations, or
-        anything that may have changed. When researching a represented company or
-        product, prioritize its configured official sources. Briefly name the
-        sources in the spoken answer.
+        anything that may have changed. When researching a configured contact,
+        prioritize its official sources. Briefly name the sources in the spoken
+        answer.
         """
         nonlocal search_count
 
