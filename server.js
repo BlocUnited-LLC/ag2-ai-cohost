@@ -26,12 +26,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ---------------------------------------------------------------------------
 // /session — WebSocket proxy to AG2 Python backend
 //
-// AG2 uses WebSocket signaling (not REST POST /offer + /answer).
-// The browser opens a WS connection to /session here; this server proxies it
-// to the AG2 backend which handles ephemeral key exchange and session config.
-// Audio travels P2P between the browser and OpenAI — AG2 is signaling only.
-//
-// See: https://docs.ag2.ai/latest/docs/user-guide/advanced-concepts/realtime-agent/webrtc/
+// The browser opens a WebSocket connection to /session here. The Python
+// backend bridges 24 kHz PCM audio to AG2 LiveAgent, which owns the OpenAI
+// Realtime connection. API credentials never leave the backend.
 // ---------------------------------------------------------------------------
 const wsProxy = createProxyMiddleware({
   target:       AG2_BACKEND_URL,
@@ -56,7 +53,7 @@ app.use('/session', wsProxy);
 const server = app.listen(PORT, () => {
   console.log(`[Server] AI Cohost running at http://localhost:${PORT}`);
   console.log(`[Server] AG2 backend: ${AG2_BACKEND_URL}`);
-  console.log(`[Server] WebSocket /session → ${AG2_BACKEND_URL}/session`);
+  console.log(`[Server] Live audio /session → ${AG2_BACKEND_URL}/session`);
 });
 
 server.on('upgrade', wsProxy.upgrade);

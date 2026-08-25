@@ -2,8 +2,6 @@ import os
 import re
 import time
 import logging
-from typing import Annotated
-
 import httpx
 
 logger = logging.getLogger("uvicorn.error")
@@ -33,7 +31,7 @@ def _reset_session_if_stale() -> None:
 
 
 def subscribe_to_newsletter(
-    email: Annotated[str, "The email address to subscribe to the newsletter"],
+    email: str,
 ) -> str:
     """Subscribe an email address to the BlocUnited newsletter.
 

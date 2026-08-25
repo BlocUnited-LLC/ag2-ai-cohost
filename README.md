@@ -11,8 +11,8 @@ A browser-based AI avatar that listens through your microphone and talks back in
 - [Node.js](https://nodejs.org) (v18 or later)
 - [Python](https://www.python.org/downloads/) (v3.10 or later) — needed for the AI backend
 - [Git](https://git-scm.com) — needed to clone the project
-- An **OpenAI API key** with access to `gpt-4o-mini-realtime-preview` — get one at [platform.openai.com](https://platform.openai.com)
-- Chrome or Edge browser (required for WebRTC mic access)
+- An **OpenAI API key** with access to `gpt-realtime-2` — get one at [platform.openai.com](https://platform.openai.com)
+- Chrome or Edge browser (required for microphone access)
 
 ---
 
@@ -41,9 +41,9 @@ Open the file `ag2-backend/OAI_CONFIG_LIST` in any text editor and replace `<you
 ```json
 [
   {
-    "model": "gpt-4o-mini-realtime-preview",
+    "model": "gpt-realtime-2",
     "api_key": "sk-proj-...",
-    "tags": ["gpt-4o-mini-realtime", "realtime"]
+    "voice": "coral"
   }
 ]
 ```
@@ -81,7 +81,7 @@ Then open **http://localhost:3001** in Chrome or Edge.
 
 Press **`M`** to mute/unmute your mic to the AI. When muted:
 - A red **"MIC OFF"** indicator appears in the top-left corner
-- The AI hears silence — the WebRTC connection stays alive
+- The AI receives no microphone audio — the LiveAgent connection stays alive
 - Press **`M`** again to unmute instantly
 
 You can also control this programmatically from the browser console:
@@ -106,13 +106,13 @@ window.setMicMuted(false)   // unmute
 
 ## Customising the AI persona
 
-The AI's name, personality, and opening line are defined in `ag2-backend/realtime_over_webrtc/main.py`. Edit the `system_message` field to change how the AI behaves, then restart Terminal 1.
+The AI's name, personality, and opening line are defined in `ag2-backend/realtime_over_webrtc/main.py`. Edit `BASE_SYSTEM_MESSAGE` to change how the AI behaves, then restart Terminal 1.
 
 ---
 
 ## Tool / function calling
 
-The AI cohost can perform actions via AG2 tool integrations registered in `ag2-backend/realtime_over_webrtc/main.py`:
+The AI cohost can perform actions through tools passed to `LiveAgent` in `ag2-backend/realtime_over_webrtc/main.py`:
 
 | Tool | Description |
 |---|---|
@@ -123,8 +123,32 @@ The AI cohost can perform actions via AG2 tool integrations registered in `ag2-b
 | `trigger_overlay(animation)` | Trigger an OBS overlay |
 | `play_sound(sound_name)` | Play a sound effect |
 | `subscribe_to_newsletter(email)` | Subscribe to the BlocUnited newsletter |
+| `web_search(query)` | Search the public internet through OpenAI web search |
 
 Tool implementations are in `ag2-backend/tools/`. Replace the placeholder functions with your actual platform APIs (Twitch, Kick, YouTube, etc.).
+
+Company identity and web search are modular settings in `ag2-backend/OAI_CONFIG_LIST`:
+
+```json
+"company_name": "BlocUnited",
+"company_website": "https://blocunited.com/",
+"products": [
+  {
+    "name": "Mozaiks",
+    "description": "An open-source AI app factory for building, running, and iterating on AI-native software products.",
+    "website": "https://www.mozaiks.ai/",
+    "documentation": "https://docs.mozaiks.ai/",
+    "repository": "https://github.com/BlocUnited-LLC/mozaiks"
+  }
+],
+"web_search_model": "gpt-5-mini",
+"web_search_limit": 10
+```
+
+Change the company fields to reuse the cohost for another organization. Add any
+number of entries to `products`; the agent will use each product's official sources
+when researching it. The search limit applies per voice session and helps control
+API usage.
 
 The safety allow-list in `ag2-backend/tools/safety.py` controls which tools the agent is permitted to call.
 

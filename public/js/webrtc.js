@@ -1,218 +1,220 @@
 'use strict';
 
+// Browser audio bridge for AG2 LiveAgent. The legacy filename is retained so
+// existing deployments do not need to change cached asset paths.
 (function () {
+  var TARGET_SAMPLE_RATE = 24000;
+  var socket = null;
+  var reconnectTimer = null;
+  var shuttingDown = false;
+  var subtitleTimer = null;
+  var ready = false;
 
-  // ── Configuration ───────────────────────────────────────────────────────────
-  // Set window.COHOST_CONFIG.signalingBaseUrl to override the signaling host.
-  function signalingUrl() {
+  var audioContext = null;
+  var micStream = null;
+  var micSource = null;
+  var micProcessor = null;
+  var outputDestination = null;
+  var nextPlaybackTime = 0;
+  var micMuted = false;
+
+  function sessionUrl() {
     var base = (window.COHOST_CONFIG && window.COHOST_CONFIG.signalingBaseUrl) || '';
     if (base) return base.replace(/^http/, 'ws').replace(/\/$/, '') + '/session';
     return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/session';
   }
 
-  // ── Module state ─────────────────────────────────────────────────────────────
-  var agWebRTC       = null;
-  var reconnectTimer = null;
-  var shuttingDown   = false;
-  var subtitleTimer  = null;
-  var peerConnection = null;   // captured RTCPeerConnection for mic control
-  var micMuted       = false;  // current mute state
+  function showSubtitle(text) {
+    var el = document.getElementById('subtitle-overlay');
+    if (!el) return;
+    el.textContent = text;
+    el.classList.add('visible');
+    clearTimeout(subtitleTimer);
+    subtitleTimer = setTimeout(function () { el.classList.remove('visible'); }, 6000);
+  }
 
-  // ── Mic mute toggle ──────────────────────────────────────────────────────────
-  // Disables outgoing audio tracks on the RTCPeerConnection so OpenAI hears
-  // silence. The WebRTC connection stays alive — she just can't hear you.
+  function setThinking(active) {
+    var el = document.getElementById('thinking-indicator');
+    if (el) el.classList.toggle('visible', !!active);
+  }
+
   function setMicMuted(muted) {
     micMuted = !!muted;
-    if (peerConnection) {
-      peerConnection.getSenders().forEach(function (sender) {
-        if (sender.track && sender.track.kind === 'audio') {
-          sender.track.enabled = !micMuted;
-        }
-      });
-    }
-    // Update UI indicator
     var el = document.getElementById('mic-mute-indicator');
     if (el) el.classList.toggle('visible', micMuted);
-    console.info('[WebRTC] Mic ' + (micMuted ? 'MUTED' : 'UNMUTED'));
+    console.info('[LiveAudio] Mic ' + (micMuted ? 'MUTED' : 'UNMUTED'));
   }
 
   function toggleMic() {
     setMicMuted(!micMuted);
   }
 
-  // ── Keyboard shortcut: press M to toggle mic ─────────────────────────────────
-  document.addEventListener('keydown', function (e) {
-    // Ignore if typing in an input field
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'm' || e.key === 'M') toggleMic();
+  document.addEventListener('keydown', function (event) {
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+    if (event.key === 'm' || event.key === 'M') toggleMic();
   });
 
-  // ── Subtitle overlay ─────────────────────────────────────────────────────────
-  function showSubtitle(text) {
-    var el = document.getElementById('subtitle-overlay');
-    if (!el) return;
-    el.textContent = (typeof text === 'string') ? text : JSON.stringify(text);
-    el.classList.add('visible');
-    clearTimeout(subtitleTimer);
-    subtitleTimer = setTimeout(function () { el.classList.remove('visible'); }, 6000);
+  function downsampleToPcm16(samples, sourceRate) {
+    var ratio = sourceRate / TARGET_SAMPLE_RATE;
+    var outputLength = Math.max(1, Math.floor(samples.length / ratio));
+    var buffer = new ArrayBuffer(outputLength * 2);
+    var view = new DataView(buffer);
+
+    for (var outputIndex = 0; outputIndex < outputLength; outputIndex += 1) {
+      var start = Math.floor(outputIndex * ratio);
+      var end = Math.min(samples.length, Math.floor((outputIndex + 1) * ratio));
+      var total = 0;
+      for (var inputIndex = start; inputIndex < end; inputIndex += 1) total += samples[inputIndex];
+      var sample = total / Math.max(1, end - start);
+      sample = Math.max(-1, Math.min(1, sample));
+      view.setInt16(outputIndex * 2, sample < 0 ? sample * 32768 : sample * 32767, true);
+    }
+    return buffer;
   }
 
-  function clearSubtitle() {
-    clearTimeout(subtitleTimer);
-    var el = document.getElementById('subtitle-overlay');
-    if (el) el.classList.remove('visible');
+  async function ensureAudio() {
+    if (audioContext) return;
+
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+
+    var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    audioContext = new AudioContextClass();
+    outputDestination = audioContext.createMediaStreamDestination();
+
+    var audioEl = document.getElementById('ai-audio');
+    if (audioEl) {
+      audioEl.srcObject = outputDestination.stream;
+      audioEl.play().catch(function () {});
+    }
+    if (typeof window.setupHeadAudio === 'function') {
+      window.setupHeadAudio(outputDestination.stream);
+    }
+
+    micSource = audioContext.createMediaStreamSource(micStream);
+    micProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+    micProcessor.onaudioprocess = function (event) {
+      if (!ready || micMuted || !socket || socket.readyState !== WebSocket.OPEN) return;
+      var pcm = downsampleToPcm16(event.inputBuffer.getChannelData(0), audioContext.sampleRate);
+      socket.send(pcm);
+    };
+    micSource.connect(micProcessor);
+    micProcessor.connect(audioContext.destination);
+
+    console.info('[LiveAudio] Microphone and PCM playback bridge ready.');
   }
 
-  // ── Thinking indicator ───────────────────────────────────────────────────────
-  function setThinking(active) {
-    var el = document.getElementById('thinking-indicator');
-    if (!el) return;
-    el.classList.toggle('visible', !!active);
-  }
-
-  // ── DataChannel messages ──────────────────────────────────────────────────────
-  function handleDataMessage(raw) {
-    var msg;
-    try { msg = JSON.parse(raw); } catch (_) { return; }
-    switch (msg.type) {
-      case 'subtitle': showSubtitle(msg.payload); break;
-      case 'thinking': setThinking(msg.payload !== false); break;
+  async function resumeLiveAudio() {
+    try {
+      await ensureAudio();
+      if (audioContext.state === 'suspended') await audioContext.resume();
+      var audioEl = document.getElementById('ai-audio');
+      if (audioEl) await audioEl.play().catch(function () {});
+    } catch (err) {
+      console.error('[LiveAudio] Could not start browser audio:', err);
     }
   }
 
-  // ── Destroy ──────────────────────────────────────────────────────────────────
-  function destroyConnection() {
-    if (agWebRTC) {
-      try {
-        if (typeof agWebRTC.close       === 'function') agWebRTC.close();
-        if (typeof agWebRTC.disconnect  === 'function') agWebRTC.disconnect();
-      } catch (_) {}
-      agWebRTC = null;
-    }
-    console.info('[WebRTC] Connection destroyed.');
+  function playPcm(arrayBuffer) {
+    if (!audioContext || !outputDestination || !arrayBuffer.byteLength) return;
+    var pcm = new Int16Array(arrayBuffer);
+    var audioBuffer = audioContext.createBuffer(1, pcm.length, TARGET_SAMPLE_RATE);
+    var channel = audioBuffer.getChannelData(0);
+    for (var i = 0; i < pcm.length; i += 1) channel[i] = pcm[i] / 32768;
+
+    var source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(outputDestination);
+    var startAt = Math.max(audioContext.currentTime + 0.01, nextPlaybackTime);
+    source.start(startAt);
+    nextPlaybackTime = startAt + audioBuffer.duration;
   }
 
-  // ── Reconnect ─────────────────────────────────────────────────────────────────
+  function handleControl(raw) {
+    var message;
+    try { message = JSON.parse(raw); } catch (_) { return; }
+    switch (message.type) {
+      case 'ready':
+        ready = true;
+        console.info('[LiveAudio] AG2 LiveAgent session ready.');
+        break;
+      case 'subtitle': showSubtitle(message.payload || ''); break;
+      case 'thinking': setThinking(message.payload !== false); break;
+      case 'error': console.error('[LiveAudio] Backend error:', message.message); break;
+    }
+  }
+
   function scheduleReconnect() {
     if (shuttingDown) return;
     clearTimeout(reconnectTimer);
-    setThinking(false);
-    console.info('[WebRTC] Reconnecting in 2 s...');
-    reconnectTimer = setTimeout(function () { if (!shuttingDown) initWebRTC(); }, 2000);
+    reconnectTimer = setTimeout(initLiveAudio, 2000);
   }
 
-  // ── Wire audio into HeadAudio for lip-sync ────────────────────────────────────
-  // ag2client manages mic + playback internally; we just tap into the incoming
-  // audio track for TalkingHead mouth animation — no separate <audio> element needed.
-  function hookAudio(pc) {
-    if (!pc) return;
-    pc.addEventListener('track', function (event) {
-      if (!event.track || event.track.kind !== 'audio') return;
-      var stream = (event.streams && event.streams[0]) || new MediaStream([event.track]);
-      // Also drive the visible <audio> element so volume meters work in OBS
-      var audioEl = document.getElementById('ai-audio');
-      if (audioEl && !audioEl.srcObject) {
-        audioEl.srcObject = stream;
-        audioEl.play().catch(function () {});
-      }
-      if (typeof window.setupHeadAudio === 'function') window.setupHeadAudio(stream);
-      console.info('[WebRTC] Remote audio track received — lip-sync active.');
-    });
-
-    // Hook DataChannel if AG2 sends one
-    pc.addEventListener('datachannel', function (event) {
-      var ch = event.channel;
-      ch.onmessage = function (e) { handleDataMessage(e.data); };
-    });
-  }
-
-  // ── Main ──────────────────────────────────────────────────────────────────────
-  // ag2client.WebRTC handles the full signaling flow:
-  //   WS /session → AG2 Python → OpenAI ephemeral key → SDP P2P
-  // Mic access and audio playback are handled inside ag2client.
-  async function initWebRTC() {
-    destroyConnection();
-
-    if (typeof ag2client === 'undefined') {
-      console.error('[WebRTC] ag2client not loaded. Retrying...');
-      scheduleReconnect();
-      return;
+  async function initLiveAudio() {
+    shuttingDown = false;
+    ready = false;
+    if (socket) {
+      socket.onclose = null;
+      socket.close();
     }
-
-    var url = signalingUrl();
-    console.info('[WebRTC] Connecting to AG2 session at', url);
 
     try {
-      // ── Intercept RTCPeerConnection before ag2client creates one ──────────────
-      // ag2client doesn't expose its internal PC via a public property, so we
-      // monkey-patch the constructor to capture it the moment it's instantiated.
-      var interceptedPc = null;
-      var OrigRTCPC = window.RTCPeerConnection;
-      window.RTCPeerConnection = function (config, constraints) {
-        var pc = new OrigRTCPC(config, constraints);
-        interceptedPc = pc;
-        peerConnection = pc;  // store at module scope for mic mute control
-        console.info('[WebRTC] RTCPeerConnection intercepted for lip-sync.');
-        // Hook immediately so we never miss the 'track' event
-        hookAudio(pc);
-        return pc;
+      await ensureAudio();
+      socket = new WebSocket(sessionUrl());
+      socket.binaryType = 'arraybuffer';
+      socket.onmessage = function (event) {
+        if (typeof event.data === 'string') handleControl(event.data);
+        else playPcm(event.data);
       };
-      // Copy static members so ag2client's instanceof checks still pass
-      Object.setPrototypeOf(window.RTCPeerConnection, OrigRTCPC);
-      window.RTCPeerConnection.prototype = OrigRTCPC.prototype;
-
-      agWebRTC = new ag2client.WebRTC(url);
-
-      // Disconnect handler — triggers reconnect
-      agWebRTC.onDisconnect = function () {
-        console.warn('[WebRTC] ag2client disconnected.');
-        destroyConnection();
+      socket.onclose = function () {
+        ready = false;
+        setThinking(false);
+        console.warn('[LiveAudio] Session disconnected; reconnecting.');
         scheduleReconnect();
       };
-
-      // Connect — this: opens WS, exchanges SDP with OpenAI via AG2, enables mic
-      await agWebRTC.connect();
-
-      // Restore the real RTCPeerConnection constructor
-      window.RTCPeerConnection = OrigRTCPC;
-
-      // Fallback: if intercept fired after connect, check receivers now
-      if (interceptedPc) {
-        interceptedPc.getReceivers().forEach(function (receiver) {
-          if (receiver.track && receiver.track.kind === 'audio') {
-            var stream = new MediaStream([receiver.track]);
-            var audioEl = document.getElementById('ai-audio');
-            if (audioEl && !audioEl.srcObject) {
-              audioEl.srcObject = stream;
-              audioEl.play().catch(function () {});
-            }
-            if (typeof window.setupHeadAudio === 'function') window.setupHeadAudio(stream);
-            console.info('[WebRTC] Audio receiver found post-connect — lip-sync active.');
-          }
-        });
-      }
-
-      console.info('[WebRTC] Connected. You can now speak to the AI co-host.');
-
-      // If mic was muted before reconnect, re-apply mute state
-      if (micMuted) setMicMuted(true);
+      socket.onerror = function (event) {
+        console.error('[LiveAudio] WebSocket error:', event);
+      };
     } catch (err) {
-      console.error('[WebRTC] Connection failed:', err);
-      destroyConnection();
+      console.error('[LiveAudio] Initialization failed:', err);
       scheduleReconnect();
     }
   }
 
-  // ── Public API ────────────────────────────────────────────────────────────────
-  window.initWebRTC    = initWebRTC;
-  window.toggleMic     = toggleMic;
-  window.setMicMuted   = setMicMuted;
-  window.destroyWebRTC = function () {
+  function destroyLiveAudio() {
     shuttingDown = true;
+    ready = false;
     clearTimeout(reconnectTimer);
-    destroyConnection();
-    clearSubtitle();
-    setThinking(false);
-  };
+    if (socket) {
+      socket.onclose = null;
+      socket.close();
+      socket = null;
+    }
+    if (micProcessor) micProcessor.disconnect();
+    if (micSource) micSource.disconnect();
+    if (micStream) micStream.getTracks().forEach(function (track) { track.stop(); });
+    if (audioContext) audioContext.close().catch(function () {});
+    micProcessor = null;
+    micSource = null;
+    micStream = null;
+    outputDestination = null;
+    audioContext = null;
+    nextPlaybackTime = 0;
+  }
 
+  window.initLiveAudio = initLiveAudio;
+  window.resumeLiveAudio = resumeLiveAudio;
+  window.destroyLiveAudio = destroyLiveAudio;
+  window.toggleMic = toggleMic;
+  window.setMicMuted = setMicMuted;
+
+  // Backward-compatible names for integrations that used the old WebRTC API.
+  window.initWebRTC = initLiveAudio;
+  window.destroyWebRTC = destroyLiveAudio;
 }());

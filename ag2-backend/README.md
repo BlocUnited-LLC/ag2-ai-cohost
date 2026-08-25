@@ -1,18 +1,18 @@
 
-# **RealtimeAgent over WebRTC**
+# **LiveAgent browser audio bridge**
 
-This project demonstrates how to create a voice assistant using Python, [FastAPI](https://fastapi.tiangolo.com/) and an [AG2 RealtimeAgent](https://docs.ag2.ai/docs/reference/agentchat/realtime_agent/realtime_agent#realtimeagent). The application streams audio from a client browser to [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime-webrtc) directly over [WebRTC](https://webrtc.org/).
+This project demonstrates a voice assistant using Python, [FastAPI](https://fastapi.tiangolo.com/), and [AG2 LiveAgent](https://docs.ag2.ai/docs/user-guide/live/live_agent/). The browser streams 24 kHz PCM audio over a local WebSocket; LiveAgent owns the server-side OpenAI Realtime connection.
 
 ## **Key Features**
-- **WebRTC Audio Streaming**: Direct real-time audio streaming between the browser and OpenAI API over [WebRTC](https://webrtc.org/).
-- **FastAPI Integration**: A lightweight Python backend for handling [RealtimeAgent](https://docs.ag2.ai/docs/reference/agentchat/realtime_agent/realtime_agent#realtimeagent) connection and function calling.
+- **Realtime Audio Streaming**: Full-duplex browser audio over a WebSocket bridge to AG2 LiveAgent.
+- **FastAPI Integration**: A lightweight Python backend that connects each browser session to LiveAgent.
 
 ## **Prerequisites**
 
 Before you begin, ensure you have the following:
 - **Python 3.9+**: The project was tested with `3.9`. Download [here](https://www.python.org/downloads/).
 - **An OpenAI account and an OpenAI API Key.** You can sign up [here](https://platform.openai.com/).
-  - **OpenAI Realtime API access.**
+  - **OpenAI Realtime API access** for `gpt-realtime-2`.
 
 ## **Local Setup**
 
@@ -30,17 +30,6 @@ Create a `OAI_CONFIG_LIST` file based on the provided `OAI_CONFIG_LIST_sample`:
 cp OAI_CONFIG_LIST_sample OAI_CONFIG_LIST
 ```
 In the OAI_CONFIG_LIST file, update the `api_key` to your OpenAI API key.
-
-#### Important note
-
-Currenlty WebRTC can be used only by API keys the begin with:
-
-```
-sk-proj
-```
-
-Other keys may result internal server error  (500) on OpenAI server. For more details see:
-https://community.openai.com/t/realtime-api-create-sessions-results-in-500-internal-server-error/1060964/5
 
 ### (Optional) Create and use a virtual environment
 

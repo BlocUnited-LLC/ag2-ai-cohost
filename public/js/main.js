@@ -2,7 +2,7 @@
 
 // ---------------------------------------------------------------------------
 // Application bootstrap — error boundary + ordered init
-// This is the only file that coordinates avatar and WebRTC startup.
+// This is the only file that coordinates avatar and live audio startup.
 // It does not contain networking or avatar rendering logic.
 // ---------------------------------------------------------------------------
 (function () {
@@ -26,14 +26,14 @@
       await window.initAvatar();
     } catch (err) {
       console.error('[Main] Avatar initialization failed:', err);
-      // Not fatal — continue so WebRTC still connects
+      // Not fatal — continue so live audio still connects
     }
 
-    // Step 2: Start WebRTC signaling — reconnect logic lives entirely in webrtc.js
+    // Step 2: Start the AG2 LiveAgent audio bridge.
     try {
-      await window.initWebRTC();
+      await window.initLiveAudio();
     } catch (err) {
-      console.error('[Main] WebRTC initialization failed:', err);
+      console.error('[Main] Live audio initialization failed:', err);
       // webrtc.js schedules its own reconnect; this catch is a last-resort guard
     }
   }
@@ -47,8 +47,8 @@
   // Optional: clean up on page hide (browser tab switch / OBS scene swap)
   // Reconnection runs automatically when the page becomes visible again via OBS.
   window.addEventListener('pagehide', function () {
-    if (typeof window.destroyWebRTC === 'function') {
-      window.destroyWebRTC();
+    if (typeof window.destroyLiveAudio === 'function') {
+      window.destroyLiveAudio();
     }
   });
 

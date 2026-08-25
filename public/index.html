@@ -11,10 +11,10 @@
 <!-- Avatar rendering surface -->
 <div id='avatar-container'></div>
 
-<!-- Remote AI audio — srcObject is set by webrtc.js, never has a src attribute -->
+<!-- Remote AI audio — srcObject is set by the LiveAgent audio bridge -->
 <audio id='ai-audio' autoplay playsinline></audio>
 
-<!-- Subtitle overlay: shown/hidden by webrtc.js DataChannel messages -->
+<!-- Subtitle overlay: shown/hidden by LiveAgent stream events -->
 <div id='subtitle-overlay' aria-live='polite'></div>
 
 <!-- Thinking indicator: toggled when AG2 sends type=thinking -->
@@ -31,6 +31,7 @@
     var overlay = document.getElementById('start-overlay');
     overlay.classList.add('hidden');
     if (typeof window.resumeAudio === 'function') window.resumeAudio();
+    if (typeof window.resumeLiveAudio === 'function') window.resumeLiveAudio();
   ">&#9654; Click to Start</button>
 </div>
 
@@ -48,12 +49,6 @@
   to CDN URLs. No local copy of TalkingHead or Three.js is required.
   Avatar.js imports TalkingHead and HeadAudio directly via these mappings.
 -->
-<!--
-  ag2client v0.3.1 — handles WebSocket /session signaling + WebRTC to OpenAI.
-  Must load before the ES module scripts below.
--->
-<script src='https://github.com/ag2ai/ag2-js-client/releases/download/v0.3.1/index.global.js'></script>
-
 <script type='importmap'>
 {
   "imports": {
@@ -68,7 +63,7 @@
   All scripts are ES modules (deferred by default).
   Execution order is document order, which guarantees:
     1. avatar.js  — defines window.initAvatar + window.setupHeadAudio
-    2. webrtc.js  — defines window.initWebRTC
+    2. webrtc.js  — browser PCM bridge for AG2 LiveAgent
     3. main.js    — calls both after DOM is ready
 -->
 <script type='module' src='js/avatar.js'></script>

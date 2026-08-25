@@ -1,12 +1,10 @@
-from typing import Annotated
-
 # Placeholder API layer
 # Replace with Twitch/Kick/YouTube moderation APIs
 
 
 def timeout_user(
-    username: Annotated[str, "The username to timeout from chat"],
-    duration: Annotated[int, "Duration of timeout in seconds"] = 60,
+    username: str,
+    duration: int = 60,
 ) -> str:
     """Timeout a user from chat."""
     print(f"[MODERATION] Timeout {username} for {duration}s")
@@ -14,7 +12,7 @@ def timeout_user(
 
 
 def ban_user(
-    username: Annotated[str, "The username to permanently ban"],
+    username: str,
 ) -> str:
     """Permanently ban a user from chat."""
     print(f"[MODERATION] Ban {username}")
@@ -22,7 +20,7 @@ def ban_user(
 
 
 def delete_message(
-    message_id: Annotated[str, "The ID of the message to delete"],
+    message_id: str,
 ) -> str:
     """Delete a specific chat message."""
     print(f"[MODERATION] Delete message {message_id}")
