@@ -1,195 +1,155 @@
-# AI Cohost
+<p align="center">
+  <img src="docs/assets/ag2-ai-cohost-logo.png" alt="AG2 AI Cohost — a BlocUnited project" width="640" />
+</p>
 
-A browser-based AI avatar that listens through your microphone and talks back in real time — with lip-sync. Designed to be used as an OBS Browser Source for live streams and podcasts.
+<h1 align="center">AG2 AI Cohost</h1>
 
-**How it works:** You speak → the AI responds with its voice → the 3D avatar's mouth moves in sync.
+<p align="center">
+  <strong>Give your next stream a voice to talk to.</strong><br />
+  A real-time AI voice companion with an animated avatar, built in public by
+  <a href="https://github.com/BlocUnited-LLC">BlocUnited</a>.
+</p>
 
----
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-61d9bd?style=flat-square" alt="Project license: MIT" /></a>
+  <img src="https://img.shields.io/badge/powered_by-AG2-8bb8f8?style=flat-square" alt="Powered by AG2" />
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/contributions-welcome-61d9bd?style=flat-square" alt="Contributions welcome" /></a>
+</p>
 
-## What you need before starting
+<p align="center">
+  <a href="#what-you-can-do">Features</a> &middot;
+  <a href="#how-it-works">How it works</a> &middot;
+  <a href="#quick-start">Quick start</a> &middot;
+  <a href="#bring-your-cohost-into-obs">OBS setup</a> &middot;
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
 
-- [Node.js](https://nodejs.org) (v18 or later)
-- [Python](https://www.python.org/downloads/) (v3.10 or later) — needed for the AI backend
-- [Git](https://git-scm.com) — needed to clone the project
-- An **OpenAI API key** with access to `gpt-realtime-2` — get one at [platform.openai.com](https://platform.openai.com)
-- Chrome or Edge browser (required for microphone access)
+## A cohost for the conversation
 
----
+Talk into your microphone. Hear an AI response. Watch a 3D avatar speak along with it.
 
-## Setup (first time only)
+AG2 AI Cohost brings voice conversation, an on-screen personality, and a transparent browser scene together for **livestreams, podcasts, and interactive demos**. Give the cohost a persona, add context about your project, and make it part of your show through an OBS Browser Source.
 
-### 1. Clone the repo
+The app runs locally with a Node.js web server and an AG2 Python backend. Voice responses and web search use OpenAI services, so an internet connection and your own API access are required.
+
+## What you can do
+
+| Capability | What it brings to your show |
+| --- | --- |
+| **Have a voice conversation** | Speak through your microphone and hear responses from AG2 LiveAgent with OpenAI Realtime. |
+| **Give the voice a face** | TalkingHead and HeadAudio animate a 3D avatar with audio-driven lip-sync. |
+| **Keep the conversation moving** | Interrupt a response by speaking; press **M** to mute or unmute your microphone while keeping the connection open. |
+| **Make it your cohost** | Configure its personality, opening line, voice, and background knowledge about your projects. |
+| **Bring it on screen** | Use the transparent browser scene in OBS, with captions and a thinking indicator. |
+| **Extend its abilities** | Use the web-search tool or build integrations from the included Python tool functions. |
+
+> **Integration status:** voice, avatar, and web-search paths are implemented. Chat moderation, stream-title changes, overlays, and sound-effect tools are currently placeholders that need platform APIs. The newsletter tool makes real requests to a configured service. See [tool configuration and status](docs/configuration.md#tools-and-function-calling).
+
+## How it works
+
+<p align="center">
+  <img src="docs/assets/ag2-ai-cohost-infographic.png" alt="Four steps: speak into your microphone; AG2 and OpenAI Realtime respond; the browser animates the avatar with voice, lip-sync, and captions; add the browser scene to OBS." width="100%" />
+</p>
+
+The browser streams microphone audio through the Node.js server to **FastAPI + AG2 LiveAgent**, which connects to OpenAI Realtime. Returned audio drives the voice and avatar; conversation events update captions and the thinking indicator. OBS displays the browser scene as part of your broadcast.
+
+**Current transport:** 24 kHz PCM audio over a WebSocket at `/session`. The repository retains filenames such as `webrtc.js` and `realtime_over_webrtc/` from its earlier WebRTC implementation. API credentials stay in the Python backend.
+
+**Stack:** Node.js / Express · Python / FastAPI · AG2 LiveAgent · OpenAI Realtime · TalkingHead / HeadAudio · Three.js
+
+## Quick start
+
+### 1. Get the prerequisites
+
+- **Node.js 18+**, **Python 3.10+**, and **Git**.
+- **Chrome or Edge**, a microphone, and headphones for clearer interruptions.
+- An **OpenAI API key** with access to the model configured in the [sample configuration](ag2-backend/OAI_CONFIG_LIST_sample). The sample uses `gpt-realtime-2` for voice and `gpt-5-mini` for web search; provider usage is billed to your account.
+- **OBS Studio** if you want to add the cohost to a broadcast.
+
+### 2. Clone and install
 
 ```bash
 git clone https://github.com/BlocUnited-LLC/ag2-ai-cohost.git
 cd ag2-ai-cohost
-```
-
-### 2. Install dependencies and set up the AI backend
-
-This single command does everything: downloads the AI backend, creates a Python environment, and installs all required packages.
-
-```bash
 npm install
 npm run setup
 ```
 
-### 3. Add your OpenAI API key
+The setup script prepares the included Python backend, creates its local virtual environment, installs dependencies, and creates `ag2-backend/OAI_CONFIG_LIST` from the sample if it does not exist.
 
-Open the file `ag2-backend/OAI_CONFIG_LIST` in any text editor and replace `<your OpenAI API key here>` with your actual key:
+### 3. Configure the voice
 
-```json
-[
-  {
-    "model": "gpt-realtime-2",
-    "api_key": "sk-proj-...",
-    "voice": "coral"
-  }
-]
-```
+Open `ag2-backend/OAI_CONFIG_LIST` and replace `<your OpenAI API key here>` with your key. Keep the rest of the sample settings to start, or adjust `voice` and `agent_prompt` to shape your cohost.
 
-> **Keep this file private.** It is already in `.gitignore` so it will never be accidentally committed.
+This local configuration file is ignored by Git. Keep credentials out of screenshots, issues, and commits. See the [configuration guide](docs/configuration.md) for persona, contacts, and tool settings.
 
----
+### 4. Start both services
 
-## Running the app
+Run these commands from the repository root in **two separate terminals**.
 
-You need **two terminals** open at the same time.
+**Terminal 1 — AI backend** (port 5050):
 
-**Terminal 1 — AI backend:**
 ```bash
 npm run start:ag2
 ```
 
-**Terminal 2 — Web server:**
+**Terminal 2 — web server** (port 3001):
+
 ```bash
 npm start
 ```
 
-Then open **http://localhost:3001** in Chrome or Edge.
+Open **[http://localhost:3001](http://localhost:3001)**, click **▶ Click to Start**, allow microphone access, and start talking. Press **M** to mute or unmute; a red **MIC OFF** indicator shows when the microphone is muted.
 
----
+Having trouble with audio or the avatar? Start with [troubleshooting](docs/troubleshooting.md).
 
-## Using the app
+## Bring your cohost into OBS
 
-1. The 3D avatar will appear on screen.
-2. Click the **▶ Click to Start** button — this is required by the browser to enable audio.
-3. Allow microphone access when the browser prompts you.
-4. Start talking. The AI will respond and the avatar's mouth will move.
+1. Keep both services running and add a **Browser Source** in OBS.
+2. Set its URL to `http://localhost:3001` and its size to match your scene, such as **1280 × 720**.
+3. Use the source's **Interact** window to click **▶ Click to Start**. Verify microphone input and audio output in your OBS setup before going live.
 
-### Mic mute toggle
+The page has a transparent background so you can place the avatar alongside your camera or other content. Browser-source microphone support depends on the OBS environment; see [browser controls and OBS setup](docs/usage.md) for setup notes and a browser-capture alternative.
 
-Press **`M`** to mute/unmute your mic to the AI. When muted:
-- A red **"MIC OFF"** indicator appears in the top-left corner
-- The AI receives no microphone audio — the LiveAgent connection stays alive
-- Press **`M`** again to unmute instantly
+## Make it your own
 
-You can also control this programmatically from the browser console:
-```js
-window.toggleMic()          // toggle
-window.setMicMuted(true)    // mute
-window.setMicMuted(false)   // unmute
-```
+| Customize | Start here |
+| --- | --- |
+| Personality, voice, opening line, and project context | [Agent configuration](docs/configuration.md#agent-prompt-and-contacts) |
+| Microphone controls and interruption sensitivity | [Browser controls](docs/usage.md#browser-controls) |
+| Avatar model and framing | [Avatar renderer](public/js/avatar.js) and [bundled assets](public/assets/) |
+| Captions, indicators, and scene styling | [Browser styles](public/css/styles.css) |
+| New tools and platform integrations | [Tool configuration](docs/configuration.md#tools-and-function-calling) and [Python tools](ag2-backend/tools/) |
 
----
+## Build with BlocUnited
 
-## Using with OBS
+AG2 AI Cohost is a **public BlocUnited project**, and contributions are welcome from developers, streamers, designers, and technical writers. A useful bug report, a clearer setup step, or a tested OBS configuration can help just as much as code.
 
-1. In OBS, add a **Browser Source** to your scene.
-2. Set the URL to `http://localhost:3001`.
-3. Set the width/height to match your scene (e.g. 1280 × 720).
-4. Check **Shutdown source when not visible** to save resources.
+Good places to contribute:
 
-> Both servers (Terminal 1 and Terminal 2) must be running while you stream.
+- **Creator experience:** improve onboarding, captions, microphone controls, and OBS setup guidance.
+- **Audio reliability:** investigate reconnects, interruption handling, and lip-sync across devices.
+- **Platform integrations:** connect the existing tool placeholders to real streaming APIs.
+- **Developer experience:** add focused tests and make setup easier to reproduce.
+- **Visuals and examples:** share avatar setups, scene layouts, and reusable personas with clear asset permissions.
 
----
+Read [CONTRIBUTING.md](CONTRIBUTING.md), [report a bug or suggest an idea](https://github.com/BlocUnited-LLC/ag2-ai-cohost/issues/new/choose), or [browse open issues](https://github.com/BlocUnited-LLC/ag2-ai-cohost/issues). For a larger change, open an issue first to discuss its scope.
 
-## Customising the AI persona
+## Documentation and source
 
-The AI's name, personality, and opening line are defined in `ag2-backend/realtime_over_webrtc/main.py`. Edit `BASE_SYSTEM_MESSAGE` to change how the AI behaves, then restart Terminal 1.
+| Resource | What you will find |
+| --- | --- |
+| [Usage guide](docs/usage.md) | Browser controls, interruptions, and OBS setup |
+| [Configuration guide](docs/configuration.md) | Persona, contacts, web search, and integration status |
+| [Troubleshooting](docs/troubleshooting.md) | Audio, avatar, connection, and port issues |
+| [Contribution guide](CONTRIBUTING.md) | Contribution workflow and useful validation checks |
+| [Browser app](public/) | Avatar rendering, audio bridge, and scene UI |
+| [Web server](server.js) | Static files and the `/session` WebSocket proxy |
+| [Python backend](ag2-backend/realtime_over_webrtc/main.py) | LiveAgent sessions, configuration, and tool registration |
+| [Brand assets](docs/assets/) | Project logo, workflow infographic, and generation prompts |
 
----
+## Credits and license
 
-## Tool / function calling
+Built by [BlocUnited](https://github.com/BlocUnited-LLC) with [AG2](https://github.com/ag2ai/ag2), [TalkingHead](https://github.com/met4citizen/TalkingHead), [HeadAudio](https://github.com/met4citizen/HeadAudio), and [Three.js](https://github.com/mrdoob/three.js).
 
-The AI cohost can perform actions through tools passed to `LiveAgent` in `ag2-backend/realtime_over_webrtc/main.py`:
-
-| Tool | Description |
-|---|---|
-| `timeout_user(username, duration)` | Timeout a chat user |
-| `ban_user(username)` | Permanently ban a user |
-| `delete_message(message_id)` | Delete a chat message |
-| `change_stream_title(title)` | Update the stream title |
-| `trigger_overlay(animation)` | Trigger an OBS overlay |
-| `play_sound(sound_name)` | Play a sound effect |
-| `subscribe_to_newsletter(email)` | Subscribe to the BlocUnited newsletter |
-| `web_search(query)` | Search the public internet through OpenAI web search |
-
-Tool implementations are in `ag2-backend/tools/`. Replace the placeholder functions with your actual platform APIs (Twitch, Kick, YouTube, etc.).
-
-Agent context and web search are modular settings in `ag2-backend/OAI_CONFIG_LIST`:
-
-```json
-"agent_prompt": "You are a warm, curious AI cohost. Have a natural conversation and answer whatever the user wants to know. Be concise but useful, point out practical value when it helps, and ask thoughtful follow-up questions without sounding scripted.",
-"contacts": {
-  "primary": {
-    "name": "BlocUnited",
-    "context": "BlocUnited is the team behind Mozaiks and builds open-source tools for creating AI-native software.",
-    "websites": ["https://blocunited.com/"]
-  },
-  "secondary": [
-    {
-      "name": "Mozaiks",
-      "context": "Mozaiks is an open-source AI app factory that helps people move from an idea to working AI-native software faster while retaining the flexibility and control of an open-source platform.",
-      "websites": [
-        "https://www.mozaiks.ai/",
-        "https://docs.mozaiks.ai/",
-        "https://github.com/BlocUnited-LLC/mozaiks"
-      ]
-    }
-  ]
-},
-"web_search_model": "gpt-5-mini",
-"web_search_limit": 10
-```
-
-`agent_prompt` controls the cohost's identity, tone, and general conversational
-behavior. Tool capabilities and their safety rules remain attached by the application,
-so this field can stay focused on the experience you want the agent to create.
-
-The schema is intentionally small and deterministic: every contact has `name`,
-`context`, and `websites`. Write `context` as natural background knowledge, including
-the value propositions the cohost should understand. `websites` is an ordinary array,
-so it can contain any number or type of relevant page without assigning fixed roles
-such as documentation or repository. `primary` identifies the central subject and
-`secondary` accepts any number of additional subjects. These labels organize config;
-the cohost does not say them aloud or force contacts into unrelated conversations.
-The search limit applies per voice session and helps control API usage.
-
-The safety allow-list in `ag2-backend/tools/safety.py` controls which tools the agent is permitted to call.
-
----
-
-## Troubleshooting
-
-**Avatar loads but there's no audio / mic doesn't work**
-- Make sure you clicked **▶ Click to Start** after the page loaded
-- Check that you allowed microphone access — click the lock icon in the address bar to verify
-- Confirm Terminal 1 (AG2 backend) is still running
-
-**"AG2 backend unreachable" or connection errors**
-- Make sure Terminal 1 is running (`npm run start:ag2`)
-- Re-run `npm run setup` and confirm `ag2-backend/OAI_CONFIG_LIST` has a valid API key
-
-**Avatar mouth doesn't move**
-- Open the browser DevTools console (F12) and look for `[Avatar] HeadAudio lip-sync active.`
-- If you see an error instead, try refreshing the page and clicking **▶ Click to Start** again
-
-**The agent does not stop when I speak**
-- Barge-in is enabled by default: OpenAI semantic VAD cancels the response and the browser immediately clears queued speech
-- Use headphones when possible so speaker output does not leak back into the microphone
-- If your voice is too quiet to trigger local interruption, set `bargeInThreshold` lower than `0.025` in `window.COHOST_CONFIG`; raise it if background noise causes false interruptions
-- After changing frontend audio settings, hard-refresh with `Ctrl+Shift+R`
-
-**Port 3001 already in use**
-- Another app is using port 3001. Set a different port: `PORT=3002 npm start` and open `http://localhost:3002`
+The project includes an [MIT license](LICENSE); the bundled backend includes its own [Apache 2.0 license](ag2-backend/LICENSE). Third-party libraries and avatar assets retain their own terms and notices. The bundled `julia.glb` identifies Ready Player Me in its asset metadata.

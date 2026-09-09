@@ -1,0 +1,27 @@
+name: Feature idea
+description: Suggest an improvement for creators, contributors, or the cohost experience.
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea for AG2 AI Cohost? Tell us about the workflow it would improve. Small usability fixes, documentation ideas, and integrations are all welcome.
+  - type: textarea
+    id: need
+    attributes:
+      label: What would you like to do?
+      description: Describe the creator or developer workflow and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Your proposed improvement
+      description: Explain the behavior you would like to see. Examples or sketches are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Alternatives and context
+      description: Share existing workarounds, relevant platforms, or related issues. Let us know if you would like to help build or test it.

@@ -1,0 +1,37 @@
+name: Bug report
+description: Help us reproduce a problem with setup, voice, the avatar, or an integration.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve AG2 AI Cohost. Check the [troubleshooting guide](https://github.com/BlocUnited-LLC/ag2-ai-cohost/blob/main/docs/troubleshooting.md) for known setup and audio issues. Remove API keys and private information from logs, configuration, and attachments.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can we reproduce it?
+      description: Include the steps or smallest example that produces the problem.
+      placeholder: |
+        1. Start both services...
+        2. Open the browser and click...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Your setup
+      description: Include your operating system, browser and version, Node.js and Python versions, and commit or branch. Add OBS version and audio hardware if relevant.
+      placeholder: "Windows 11, Chrome ..., Node.js ..., Python ..., commit ..."
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, or additional context
+      description: Paste relevant browser console or terminal errors. Mention any workaround you found. Remove secrets before posting.
