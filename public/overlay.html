@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en" class="overlay-root">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AG2 Cohost · OBS overlay</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","talkinghead":"https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.7/modules/talkinghead.mjs"}}</script>
+</head>
+<body class="overlay-page" data-session-status="idle" data-session-id="">
+  <div id="avatar-container"></div>
+  <div id="subtitle-overlay" class="overlay-caption" aria-live="polite"></div>
+  <div id="thinking-indicator" class="overlay-thinking" hidden>Thinking…</div>
+  <div class="overlay-notices"><div id="connection-status" role="status" aria-live="polite"></div><div id="error-message" role="alert" hidden></div><button id="enable-audio-btn" class="button secondary" type="button" hidden>Enable cohost audio</button></div>
+  <script type="module" src="/js/overlay.js"></script>
+</body>
+</html>

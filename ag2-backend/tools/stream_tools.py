@@ -2,21 +2,18 @@ def change_stream_title(
     title: str,
 ) -> str:
     """Change the stream title."""
-    print(f"[STREAM] Changing title to: {title}")
-    return f"Stream title updated to '{title}'."
+    return "Stream title integration is not connected. No title was changed."
 
 
 def trigger_overlay(
     animation: str,
 ) -> str:
     """Trigger an OBS overlay animation."""
-    print(f"[STREAM] Trigger overlay: {animation}")
-    return f"Overlay '{animation}' triggered."
+    return "Overlay control is not connected. No animation was triggered."
 
 
 def play_sound(
     sound_name: str,
 ) -> str:
     """Play a sound effect on stream."""
-    print(f"[STREAM] Playing sound: {sound_name}")
-    return f"Sound '{sound_name}' played."
+    return "Sound-effect integration is not connected. No sound was played."

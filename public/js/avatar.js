@@ -1,6 +1,6 @@
 // avatar.js — ES module
 // Loads TalkingHead via CDN importmap (see index.html).
-// Uses HeadAudio (local) for audio-driven, real-time lip-sync from WebRTC.
+// Uses HeadAudio (local) for audio-driven lip-sync from the overlay PCM stream.
 //
 // Required files in public/libs/:
 //   headaudio.mjs      — from https://github.com/met4citizen/HeadAudio  (modules/)
@@ -45,8 +45,8 @@ async function initAvatar() {
     });
     console.info('[Avatar] Avatar loaded successfully.');
   } catch (err) {
-    console.error('[Avatar] Failed to load avatar.glb:', err);
-    // Non-fatal — WebRTC will still connect even if the model is missing.
+    console.error('[Avatar] Failed to load avatar:', err);
+    throw err; // The overlay reports the failure while keeping audio connected.
   }
 
   // ⚠ Do NOT register the worklet here — Chrome's AudioContext autoplay policy
@@ -93,8 +93,8 @@ async function setupHeadAudio(mediaStream) {
 
     await headAudio.loadModel('./libs/model-en-mixed.bin');
 
-    // Connect WebRTC MediaStream → HeadAudio (analyser only — no audio output here;
-    // the HTML <audio> element handles actual playback via srcObject).
+    // Analyse the same scheduled PCM stream that the overlay plays.
+    // HeadAudio is an analyser only; the shared AudioBridge owns audible output.
     const source = talkingHead.audioCtx.createMediaStreamSource(mediaStream);
     source.connect(headAudio);
 

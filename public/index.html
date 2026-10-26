@@ -1,78 +1,36 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset='UTF-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <title>AI Cohost</title>
-    <link rel='stylesheet' href='css/styles.css'>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>AG2 Cohost · Studio controls</title>
+  <link rel="stylesheet" href="/css/styles.css">
 </head>
-<body>
-
-<!-- Avatar rendering surface -->
-<div id='avatar-container'></div>
-
-<!-- Remote AI audio — srcObject is set by the LiveAgent audio bridge -->
-<audio id='ai-audio' autoplay playsinline></audio>
-
-<!-- Subtitle overlay: shown/hidden by LiveAgent stream events -->
-<div id='subtitle-overlay' aria-live='polite'></div>
-
-<!-- Thinking indicator: toggled when AG2 sends type=thinking -->
-<div id='thinking-indicator' aria-live='polite'>Thinking&hellip;</div>
-
-<!-- Mic mute indicator: shown when mic is muted (press M to toggle) -->
-<div id='mic-mute-indicator' aria-live='polite'>&#x1F507; MIC OFF</div>
-
-<!-- Click-to-start overlay: Chrome requires a user gesture before AudioContext
-     can run. Clicking this button resumes the AudioContext, registers the
-     HeadAudio worklet, and activates lip-sync. -->
-<div id='start-overlay'>
-  <button id='start-btn' onclick="
-    var overlay = document.getElementById('start-overlay');
-    overlay.classList.add('hidden');
-    if (typeof window.resumeAudio === 'function') window.resumeAudio();
-    if (typeof window.resumeLiveAudio === 'function') window.resumeLiveAudio();
-  ">&#9654; Click to Start</button>
-</div>
-
-<!--
-  Optional runtime config — set window.COHOST_CONFIG before the scripts below
-  to point at a remote signaling server:
-
-  <script>
-    window.COHOST_CONFIG = {
-      signalingBaseUrl: 'http://192.168.1.100:3000',
-      bargeInEnabled: true,
-      bargeInThreshold: 0.025
-    };
-  </script>
--->
-
-<!--
-  Import map: maps bare module specifiers used inside talkinghead.mjs
-  to CDN URLs. No local copy of TalkingHead or Three.js is required.
-  Avatar.js imports TalkingHead and HeadAudio directly via these mappings.
--->
-<script type='importmap'>
-{
-  "imports": {
-    "three":          "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-    "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-    "talkinghead":    "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.7/modules/talkinghead.mjs"
-  }
-}
-</script>
-
-<!--
-  All scripts are ES modules (deferred by default).
-  Execution order is document order, which guarantees:
-    1. avatar.js  — defines window.initAvatar + window.setupHeadAudio
-    2. webrtc.js  — browser PCM bridge for AG2 LiveAgent
-    3. main.js    — calls both after DOM is ready
--->
-<script type='module' src='js/avatar.js'></script>
-<script type='module' src='js/webrtc.js'></script>
-<script type='module' src='js/main.js'></script>
-
+<body class="control-page" data-session-status="idle" data-session-id="">
+  <main class="studio">
+    <header class="studio-header"><a class="wordmark" href="/control" aria-label="AG2 Cohost controls"><span class="brand-mark" aria-hidden="true">◈</span> AG2 <span>Cohost</span></a><span class="local-badge"><span></span> YOUR LOCAL STUDIO</span></header>
+    <section class="intro"><p class="eyebrow">A voice at your side</p><h1>Make room for another perspective.</h1><p class="intro-copy">Your microphone lives here. Your cohost appears in OBS. One conversation, ready for your next show.</p></section>
+    <div class="studio-grid">
+      <section class="panel conversation-panel" aria-labelledby="session-heading">
+        <div class="panel-heading"><h2 id="session-heading">Your conversation</h2><span id="session-badge" class="status-badge">OFF AIR</span></div>
+        <div class="session-visual" aria-hidden="true"><div class="voice-orb">◈</div><div class="waveform"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+        <p id="connection-status" class="connection-status" role="status" aria-live="polite">Connecting to your local studio…</p>
+        <p id="session-hint" class="session-hint">Choose your microphone, then start when you are ready.</p>
+        <div id="error-message" class="notice error-notice" role="alert" hidden></div>
+        <div class="mic-settings"><label for="device-select">Microphone</label><div class="device-row"><select id="device-select"><option value="">System default microphone</option></select><button id="refresh-devices-btn" class="icon-button" type="button" aria-label="Refresh microphones" title="Refresh microphones">↻</button></div><div class="input-meter" role="meter" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="mic-level"></span></div></div>
+        <div class="primary-actions"><button id="start-btn" class="button primary" type="button" disabled><span aria-hidden="true">▶</span> Start cohost</button><button id="stop-btn" class="button danger" type="button" disabled>Stop cohost</button></div>
+        <div class="secondary-actions"><button id="mute-btn" class="button secondary" type="button" aria-label="Mute microphone" aria-pressed="false" disabled>Mute microphone</button><button id="interrupt-btn" class="button secondary" type="button" disabled>Interrupt cohost</button></div>
+        <label class="check-row" for="monitor-toggle"><input id="monitor-toggle" type="checkbox"><span>Monitor cohost audio locally<small>Leave off when OBS is playing the cohost to avoid doubled audio.</small></span></label>
+        <p class="keyboard-hint"><kbd>M</kbd> mute · <kbd>Esc</kbd> interrupt · microphone stays off until you start</p>
+      </section>
+      <div class="side-panels">
+        <section class="panel obs-panel" aria-labelledby="obs-heading"><p class="eyebrow">Into the broadcast</p><h2 id="obs-heading">Give your cohost a scene.</h2><p>Add a Browser Source in OBS and paste this private overlay link. The overlay plays the voice, avatar, and captions without using a microphone.</p><label for="overlay-url">Browser Source URL</label><div class="overlay-url-row"><input id="overlay-url" type="text" readonly spellcheck="false" aria-label="Browser Source URL" placeholder="Preparing your overlay link…"><button id="copy-overlay-btn" class="button secondary" type="button" disabled>Copy overlay URL</button></div><p id="copy-status" class="small-note" role="status">Treat this link as private. It grants access to your cohost audio.</p><ol class="setup-steps"><li><span>01</span> Set the source size to your scene, such as 1280 × 720.</li><li><span>02</span> Enable <strong>Control audio via OBS</strong> in the source properties.</li><li><span>03</span> Keep this control page open while you talk.</li></ol><div class="viewer-status"><span class="viewer-dot"></span><span id="viewer-count">No overlay connected</span></div></section>
+        <section class="panel transcript-panel" aria-labelledby="transcript-heading"><div class="panel-heading"><h2 id="transcript-heading">Latest from your cohost</h2><span id="thinking-indicator" class="thinking-label" hidden>Thinking…</span></div><p id="subtitle-overlay" class="control-caption" aria-live="polite">The conversation will appear here.</p><p id="task-status" class="task-status" role="status" hidden></p></section>
+      </div>
+    </div>
+    <footer class="studio-footer"><span>Powered by AG2 LiveAgent</span><span>Created for conversations worth sharing.</span></footer>
+  </main>
+  <script type="module" src="/js/control.js"></script>
 </body>
 </html>

@@ -27,9 +27,35 @@ Keep API keys, local `OAI_CONFIG_LIST` files, and private contact information ou
 
 ## Check your change
 
-There is no automated test suite yet: `npm test` is a placeholder that exits with an error. Include the checks you actually ran in your pull request.
+Install dependencies with `npm install` and `npm run setup`, then install the test
+browser once:
 
-For JavaScript server or startup-script changes, run a syntax check on each changed file, for example:
+```bash
+npx playwright install chromium
+```
+
+Run the complete suite from the repository root:
+
+```bash
+npm test
+```
+
+Use `npm run test:backend` for the Python unit tests or `npm run test:e2e` for
+Playwright browser and audio-worklet tests. The backend test runner uses the local
+Python virtual environment when available; `COHOST_PYTHON` can select a different
+interpreter with the required dependencies installed.
+
+Browser tests start isolated local servers on ports 3301 and 5350 and use a
+simulated provider through the real AG2 LiveAgent event stream. Override those
+ports with `COHOST_TEST_FRONTEND_PORT` and `COHOST_TEST_BACKEND_PORT` when needed.
+The tests do not read `OAI_CONFIG_LIST`, call OpenAI, or create real newsletter
+subscriptions. They cover access boundaries, one controller with multiple overlays,
+session lifecycle, microphone denial and mute, interruptions, captions, source
+visibility, rendered playback progress, and PCM resampling. Avatar rendering is
+stubbed in the automated browser suite so the tests do not depend on its CDN.
+
+Include the checks you actually ran in your pull request. For JavaScript server or
+startup-script changes, you can also run syntax checks, for example:
 
 ```bash
 node --check server.js
@@ -43,10 +69,17 @@ For Python changes, you can check compilation without starting the backend or ca
 python -m compileall -q ag2-backend/realtime_over_webrtc ag2-backend/tools
 ```
 
-These commands check syntax only. For behavior changes, also exercise the relevant flow:
+Compilation and syntax checks do not verify behavior. For changes affecting live
+audio, rendering, or OBS, also exercise the relevant flow:
 
-- **Browser or audio:** confirm the avatar loads, the start button enables audio, microphone mute works, and the cohost responds with lip-sync. Check interruption behavior if your change affects playback.
-- **OBS:** describe the source size and OBS version, and check the behavior your change is intended to improve.
+- **Browser or audio:** start from the controller and confirm microphone selection,
+  mute, stop, and interruption. Check the real avatar/CDN and lip-sync on the overlay.
+  Use an explicitly configured provider account when checking live voice quality;
+  the automated suite does not establish production latency or natural barge-in.
+- **OBS:** record the OBS version, operating system, source size, and audio route.
+  Verify the transparent Browser Source renders, its mixer receives audio, and
+  refresh/hide/show preserves the conversation without duplicate audio. Playwright
+  controls the web app rather than OBS's native interface.
 - **Tools:** verify arguments, expected results, and failure handling using mocks or a test account you control.
 - **Documentation:** check relative links, commands, and the rendered Markdown. State any instructions you could not verify.
 

@@ -7,21 +7,18 @@ def timeout_user(
     duration: int = 60,
 ) -> str:
     """Timeout a user from chat."""
-    print(f"[MODERATION] Timeout {username} for {duration}s")
-    return f"{username} has been timed out for {duration} seconds."
+    return "Chat moderation is not connected. No user was timed out."
 
 
 def ban_user(
     username: str,
 ) -> str:
     """Permanently ban a user from chat."""
-    print(f"[MODERATION] Ban {username}")
-    return f"{username} has been banned."
+    return "Chat moderation is not connected. No user was banned."
 
 
 def delete_message(
     message_id: str,
 ) -> str:
     """Delete a specific chat message."""
-    print(f"[MODERATION] Delete message {message_id}")
-    return f"Message {message_id} deleted."
+    return "Chat moderation is not connected. No message was deleted."

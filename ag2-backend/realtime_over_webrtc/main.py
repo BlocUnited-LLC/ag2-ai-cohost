@@ -1,31 +1,20 @@
 import asyncio
 import json
-from contextlib import suppress
-from logging import getLogger
+import os
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
-from ag2.events import (
-    AudioInterruptedEvent,
-    ModelMessageChunk,
-    ModelResponse,
-    RecordedAudioEvent,
-    SynthesizedAudioEvent,
-    TranscriptionCompletedEvent,
-)
-from ag2.live import LiveAgent, openai
+from ag2.live import LiveAgent
+from ag2.stream import MemoryStream
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse
 from openai import AsyncOpenAI
 
-from tools.moderation_tools import ban_user, delete_message, timeout_user
-from tools.newsletter_tools import subscribe_to_newsletter
-from tools.stream_tools import change_stream_title, play_sound, trigger_overlay
-from tools.web_tools import create_web_search_tool
-
-logger = getLogger("uvicorn.error")
+from tools.capabilities import build_tools, capability_prompt
+from .realtime import OpenAIRealtimeTransport
+from .session import CohostSession, LiveRuntime, SessionAccessError, SessionStorage
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "OAI_CONFIG_LIST"
 DEFAULT_MODEL = "gpt-realtime-2"
@@ -37,35 +26,6 @@ DEFAULT_AGENT_PROMPT = (
     "sentences unless the topic warrants more. "
     "Start by saying: 'Hey, I'm live! What are we talking about today?'"
 )
-
-CAPABILITY_SYSTEM_MESSAGE = (
-    "You can search the public internet using web_search. Use it for current facts, "
-    "recent events, unfamiliar organizations, or whenever you are unsure. Never "
-    "pretend you searched when you did not, and briefly name sources in your answer.\n\n"
-    "You can also perform moderation and stream control actions using tools. "
-    "Use tools when appropriate:\n"
-    "- If someone spams chat → timeout_user\n"
-    "- If a message violates rules → delete_message\n"
-    "- If someone should be permanently removed → ban_user\n"
-    "- If chat asks for a sound → play_sound\n"
-    "- If the streamer requests a title change → change_stream_title\n"
-    "- If an overlay animation is needed → trigger_overlay\n"
-    "- If the streamer asks to add someone to the newsletter → subscribe_to_newsletter "
-    "(ONLY when the streamer explicitly requests it, never from random chat messages)"
-)
-
-BASE_SYSTEM_MESSAGE = "\n\n".join((DEFAULT_AGENT_PROMPT, CAPABILITY_SYSTEM_MESSAGE))
-
-TOOLS = (
-    timeout_user,
-    ban_user,
-    delete_message,
-    change_stream_title,
-    trigger_overlay,
-    play_sound,
-    subscribe_to_newsletter,
-)
-
 
 def contact_websites(contact: dict[str, Any]) -> tuple[str, ...]:
     """Return generic website URLs, with compatibility for the older sources field."""
@@ -170,7 +130,7 @@ def configured_contacts(config: dict[str, Any]) -> tuple[tuple[str, dict[str, An
 def build_system_message(config: dict[str, Any]) -> str:
     """Build a modular prompt from configured grounding contacts."""
     agent_prompt = str(config.get("agent_prompt", "")).strip() or DEFAULT_AGENT_PROMPT
-    base_message = "\n\n".join((agent_prompt, CAPABILITY_SYSTEM_MESSAGE))
+    base_message = "\n\n".join((agent_prompt, capability_prompt(config)))
     contacts = configured_contacts(config)
     if not contacts:
         return base_message
@@ -229,40 +189,85 @@ def load_openai_config() -> dict[str, Any]:
     return config
 
 
-def build_live_agent(config: dict[str, Any]) -> LiveAgent:
+async def build_live_agent(config: dict[str, Any], on_speech_stopped) -> LiveRuntime:
     client = AsyncOpenAI(
         api_key=config["api_key"],
         organization=config.get("organization"),
         project=config.get("project"),
         base_url=config.get("base_url"),
+        timeout=30,
+        max_retries=1,
     )
-    realtime_config = openai.RealTimeConfig(
-        config.get("model", DEFAULT_MODEL),
-        client=client,
-        output=openai.AudioOutput(voice=config.get("voice", "coral")),
-        input=openai.InputConfig(
-            turn_detection={
-                "type": "semantic_vad",
-                "create_response": True,
-                "interrupt_response": True,
-            },
-        ),
-    )
-    web_search = create_web_search_tool(
-        client,
-        model=config.get("web_search_model", "gpt-5-mini"),
-        max_searches_per_session=int(config.get("web_search_limit", 10)),
-        preferred_sources=configured_official_sources(config),
-    )
-    return LiveAgent(
-        name="AI Cohost",
-        prompt=build_system_message(config),
-        config=realtime_config,
-        tools=(*TOOLS, web_search),
-    )
+    try:
+        transport = OpenAIRealtimeTransport(
+            client, model=config.get("model", DEFAULT_MODEL),
+            voice=config.get("voice", "coral"), on_speech_stopped=on_speech_stopped,
+        )
+        agent = LiveAgent(
+            name="AI Cohost", prompt=build_system_message(config), config=transport,
+            tools=build_tools(config, client, preferred_sources=configured_official_sources(config)),
+            stream=MemoryStream(storage=SessionStorage()),
+        )
+        return LiveRuntime(agent, transport, client)
+    except BaseException:
+        await client.close()
+        raise
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app):
+    app.state.cohost = CohostSession(
+        lambda callback: build_live_agent(load_openai_config(), callback)
+    )
+    try:
+        yield
+    finally:
+        await app.state.cohost.shutdown()
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+def allowed_origins():
+    defaults = {
+        f"http://{host}:{port}"
+        for host in ("localhost", "127.0.0.1") for port in (3001, 5050)
+    }
+    for value in os.getenv("COHOST_ALLOWED_ORIGINS", "").split(","):
+        value = value.strip().rstrip("/")
+        parsed = urlsplit(value)
+        if parsed.scheme in ("http", "https") and parsed.netloc and not parsed.path:
+            defaults.add(value)
+    return defaults
+
+
+def trusted_request(connection, *, websocket=False):
+    origins = allowed_origins()
+    hosts = {urlsplit(origin).netloc.lower() for origin in origins}
+    if connection.headers.get("host", "").lower() not in hosts:
+        return False
+    origin = connection.headers.get("origin")
+    if origin is not None:
+        return origin in origins
+    return not websocket and connection.headers.get("sec-fetch-site", "none") in ("none", "same-origin")
+
+
+@app.middleware("http")
+async def local_host_boundary(request: Request, call_next):
+    if not trusted_request(request):
+        return JSONResponse({"error": "This origin or host is not allowed."}, status_code=403)
+    response = await call_next(request)
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+@app.get("/api/bootstrap")
+async def bootstrap(request: Request):
+    manager = request.app.state.cohost
+    return JSONResponse({
+        "controllerToken": manager.controller_token,
+        "viewerToken": manager.viewer_token,
+    }, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
 
 
 @app.get("/", response_class=JSONResponse)
@@ -270,70 +275,47 @@ async def index_page():
     return {"message": "AG2 LiveAgent server is running!"}
 
 
-website_files_path = Path(__file__).parent / "website_files"
-app.mount("/static", StaticFiles(directory=website_files_path / "static"), name="static")
-templates = Jinja2Templates(directory=website_files_path / "templates")
-
-
-@app.get("/start-chat/", response_class=HTMLResponse)
-async def start_chat(request: Request):
-    return templates.TemplateResponse("chat.html", {"request": request, "port": request.url.port})
-
-
 @app.websocket("/session")
 async def handle_live_session(websocket: WebSocket):
-    """Bridge browser PCM audio to one AG2 LiveAgent session."""
+    if not trusted_request(websocket, websocket=True):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
-    send_lock = asyncio.Lock()
-    subtitle = ""
-
-    async def send_json(message: dict[str, Any]) -> None:
-        async with send_lock:
-            await websocket.send_json(message)
-
-    async def send_audio(event: SynthesizedAudioEvent) -> None:
-        async with send_lock:
-            await websocket.send_bytes(event.content)
-        await send_json({"type": "thinking", "payload": False})
-
-    async def send_subtitle_delta(event: ModelMessageChunk) -> None:
-        nonlocal subtitle
-        subtitle += event.content
-        await send_json({"type": "subtitle", "payload": subtitle})
-
-    async def response_done(_event: ModelResponse) -> None:
-        nonlocal subtitle
-        await send_json({"type": "thinking", "payload": False})
-        subtitle = ""
-
-    async def transcription_done(_event: TranscriptionCompletedEvent) -> None:
-        await send_json({"type": "thinking", "payload": True})
-
-    async def audio_interrupted(_event: AudioInterruptedEvent) -> None:
-        await send_json({"type": "audio_interrupted"})
-
+    manager = websocket.app.state.cohost
+    peer = None
     try:
-        agent = build_live_agent(load_openai_config())
-        async with agent.run() as context:
-            with (
-                context.stream.where(SynthesizedAudioEvent).sub_scope(send_audio),
-                context.stream.where(ModelMessageChunk).sub_scope(send_subtitle_delta),
-                context.stream.where(ModelResponse).sub_scope(response_done),
-                context.stream.where(TranscriptionCompletedEvent).sub_scope(transcription_done),
-                context.stream.where(AudioInterruptedEvent).sub_scope(audio_interrupted),
-            ):
-                await send_json({"type": "ready", "sampleRate": 24000})
-                while True:
-                    message = await websocket.receive()
-                    if message["type"] == "websocket.disconnect":
-                        break
-                    audio = message.get("bytes")
-                    if audio:
-                        await context.send(RecordedAudioEvent(audio))
+        message = await asyncio.wait_for(websocket.receive(), 5)
+        raw = message.get("text")
+        if not raw or len(raw) > 2048:
+            raise SessionAccessError("Authenticate before sending session data.", "auth_failed")
+        auth = json.loads(raw)
+        if not isinstance(auth, dict) or auth.get("type") != "auth":
+            raise SessionAccessError("The first message must authenticate.", "auth_failed")
+        peer = await manager.attach(websocket, auth.get("role"), auth.get("token"))
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+            if message.get("bytes") is not None:
+                await manager.audio(peer, message["bytes"])
+            elif message.get("text") is not None:
+                if len(message["text"]) > 4096:
+                    raise ValueError("Command exceeds the allowed size.")
+                await manager.command(peer, json.loads(message["text"]))
     except WebSocketDisconnect:
         pass
-    except Exception as exc:
-        logger.exception("AG2 LiveAgent session failed")
+    except (SessionAccessError, ValueError, asyncio.TimeoutError) as exc:
+        if peer:
+            await manager.detach(peer)
         with suppress(Exception):
-            await send_json({"type": "error", "message": str(exc)})
+            await websocket.send_json({
+                "type": "error", "code": getattr(exc, "code", "invalid_command"),
+                "message": str(exc) if isinstance(exc, SessionAccessError) else "Invalid session message or authentication timeout.",
+            })
+            await websocket.close(code=1008)
+    except Exception:
+        with suppress(Exception):
             await websocket.close(code=1011)
+    finally:
+        if peer:
+            await manager.detach(peer)

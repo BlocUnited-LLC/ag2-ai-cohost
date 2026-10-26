@@ -8,8 +8,6 @@ const { spawnSync } = require('child_process');
 const REPO_ROOT = path.resolve(__dirname, '..');
 const BACKEND_DIR = path.join(REPO_ROOT, 'ag2-backend');
 const VENV_DIR = path.join(BACKEND_DIR, '.venv');
-const CUSTOM_MAIN = path.join(REPO_ROOT, 'ag2-config', 'main.py');
-const BACKEND_MAIN = path.join(BACKEND_DIR, 'realtime_over_webrtc', 'main.py');
 
 function run(cmd, args, cwd) {
   return spawnSync(cmd, args, {
@@ -35,7 +33,7 @@ function tryRun(commands, cwd, description) {
 function ensureBackendRepo() {
   const marker = path.join(BACKEND_DIR, 'realtime_over_webrtc');
   if (fs.existsSync(marker)) {
-    console.log('[setup] ag2-backend submodule already populated, skipping.');
+    console.log('[setup] Included ag2-backend is present.');
     return;
   }
   console.log('[setup] Initialising ag2-backend git submodule...');
@@ -43,15 +41,6 @@ function ensureBackendRepo() {
   if (result.status !== 0 || !fs.existsSync(marker)) {
     throw new Error('Failed to initialise ag2-backend submodule. Make sure you cloned with --recurse-submodules or run: git submodule update --init');
   }
-}
-
-function applyCustomMain() {
-  if (!fs.existsSync(CUSTOM_MAIN)) {
-    console.warn('[setup] ag2-config/main.py not found — skipping custom agent config.');
-    return;
-  }
-  fs.copyFileSync(CUSTOM_MAIN, BACKEND_MAIN);
-  console.log('[setup] Copied ag2-config/main.py → ag2-backend/realtime_over_webrtc/main.py');
 }
 
 function ensureConfigFile() {
@@ -103,7 +92,6 @@ function installPythonRequirements() {
 function main() {
   try {
     ensureBackendRepo();
-    applyCustomMain();
     ensureConfigFile();
     installPythonRequirements();
     console.log('[setup] Setup complete.');
