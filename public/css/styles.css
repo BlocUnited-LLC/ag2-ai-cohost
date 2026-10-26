@@ -1,135 +1,52 @@
-/* ── Base ───────────────────────────────────────────────────────────────────
-   Transparent background required for OBS Browser Source chroma keying.
-   No scrollbars — avatar fills the entire canvas.
-   ──────────────────────────────────────────────────────────────────────── */
-*, *::before, *::after {
-    box-sizing: border-box;
-}
-
-html, body {
-    margin:     0;
-    padding:    0;
-    background: transparent;
-    overflow:   hidden;
-    width:      100%;
-    height:     100%;
-}
-
-/* ── Avatar canvas ───────────────────────────────────────────────────────── */
-#avatar-container {
-    position: absolute;
-    inset:    0;
-    width:    100vw;
-    height:   100vh;
-}
-
-/* ── Subtitle overlay ────────────────────────────────────────────────────────
-   Appears at the bottom-centre of the OBS source.
-   Fades in/out via the .visible class toggled by webrtc.js.
-   ──────────────────────────────────────────────────────────────────────── */
-#subtitle-overlay {
-    position:        fixed;
-    bottom:          72px;
-    left:            50%;
-    transform:       translateX(-50%);
-    max-width:       82%;
-    text-align:      center;
-    color:           #ffffff;
-    font-family:     'Segoe UI', Arial, sans-serif;
-    font-size:       1.35em;
-    line-height:     1.4;
-    text-shadow:     0 1px 6px rgba(0, 0, 0, 0.85), 0 0 2px rgba(0, 0, 0, 0.6);
-    opacity:         0;
-    transition:      opacity 0.35s ease;
-    pointer-events:  none;
-    z-index:         200;
-}
-
-#subtitle-overlay.visible {
-    opacity: 1;
-}
-
-/* ── Thinking indicator ──────────────────────────────────────────────────────
-   Small ambient indicator in top-right corner.
-   Toggled by webrtc.js when type=thinking DataChannel messages arrive.
-   ──────────────────────────────────────────────────────────────────────── */
-#thinking-indicator {
-    position:        fixed;
-    top:             18px;
-    right:           22px;
-    color:           rgba(255, 255, 255, 0.65);
-    font-family:     'Segoe UI', Arial, sans-serif;
-    font-size:       0.85em;
-    letter-spacing:  0.03em;
-    opacity:         0;
-    transition:      opacity 0.3s ease;
-    pointer-events:  none;
-    z-index:         200;
-}
-
-#thinking-indicator.visible {
-    opacity: 1;
-}
-
-/* ── Mic mute indicator ───────────────────────────────────────────────────────
-   Shows "MIC OFF" in the top-left corner when the mic is muted.
-   Toggled via the M key or window.toggleMic().
-   ──────────────────────────────────────────────────────────────────────── */
-#mic-mute-indicator {
-    position:        fixed;
-    top:             18px;
-    left:            22px;
-    color:           #ff4444;
-    font-family:     'Segoe UI', Arial, sans-serif;
-    font-size:       0.95em;
-    font-weight:     600;
-    letter-spacing:  0.03em;
-    text-shadow:     0 1px 4px rgba(0, 0, 0, 0.7);
-    opacity:         0;
-    transition:      opacity 0.3s ease;
-    pointer-events:  none;
-    z-index:         200;
-}
-
-#mic-mute-indicator.visible {
-    opacity: 1;
-}
-
-/* ── Click-to-start overlay ──────────────────────────────────────────────────
-   Chrome blocks AudioContext before a user gesture. This overlay is shown on
-   load and hidden once the user clicks — resuming the AudioContext and
-   registering the HeadAudio worklet for lip-sync.
-   ──────────────────────────────────────────────────────────────────────── */
-#start-overlay {
-    position:        fixed;
-    inset:           0;
-    display:         flex;
-    align-items:     center;
-    justify-content: center;
-    background:      rgba(0, 0, 0, 0.45);
-    z-index:         9999;
-    transition:      opacity 0.4s ease;
-}
-
-#start-overlay.hidden {
-    opacity:        0;
-    pointer-events: none;
-}
-
-#start-btn {
-    padding:         20px 48px;
-    font-size:       1.5em;
-    font-family:     'Segoe UI', Arial, sans-serif;
-    font-weight:     600;
-    color:           #ffffff;
-    background:      rgba(255, 255, 255, 0.12);
-    border:          2px solid rgba(255, 255, 255, 0.55);
-    border-radius:   14px;
-    cursor:          pointer;
-    backdrop-filter: blur(10px);
-    letter-spacing:  0.04em;
-    transition:      background 0.2s ease, transform 0.1s ease;
-}
-
-#start-btn:hover  { background: rgba(255, 255, 255, 0.24); }
-#start-btn:active { transform: scale(0.97); }
+:root { color-scheme: dark; font-family: 'DM Sans', 'Segoe UI', sans-serif; color: #eef3f2; background: #0c1115; font-synthesis: none; --muted: #8e9da5; --mint: #b7efd5; --line: #263137; }
+* { box-sizing: border-box; } body { margin: 0; } button, input, select { font: inherit; } button { cursor: pointer; } button:disabled { cursor: not-allowed; opacity: .38; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--mint); outline-offset: 4px; } [hidden] { display: none !important; }
+.control-page { min-height: 100vh; background: radial-gradient(ellipse at 86% 16%, #19312c55, transparent 44%), #0c1115; }
+.studio { max-width: 1160px; margin: auto; padding: 30px 42px 24px; }
+.studio-header, .studio-footer, .panel-heading, .device-row, .overlay-url-row, .viewer-status { display: flex; align-items: center; }
+.studio-header { justify-content: space-between; padding-bottom: 29px; border-bottom: 1px solid var(--line); }
+.wordmark { display: flex; gap: 8px; align-items: center; font-family: Manrope, sans-serif; font-size: 22px; font-weight: 800; color: #f1f6f5; text-decoration: none; letter-spacing: -.8px; }
+.wordmark > span:last-child { font-weight: 500; color: #b3bfc3; } .brand-mark { color: var(--mint); font-size: 34px; margin-right: 4px; line-height: 1; }
+.local-badge { font-size: 10px; color: #a5b8ad; letter-spacing: 1.7px; display: flex; gap: 8px; align-items: center; }
+.local-badge > span { width: 5px; height: 5px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 12px #b7efd566; }
+.intro { padding: 28px 0 28px; } .eyebrow { color: var(--mint); font-size: 11px; text-transform: uppercase; letter-spacing: 2.2px; font-weight: 700; margin: 0 0 14px; }
+h1, h2 { font-family: Manrope, 'Segoe UI', sans-serif; } h1 { margin: 0 0 14px; font-size: clamp(30px, 3.3vw, 40px); font-weight: 500; line-height: 1.16; letter-spacing: -1.5px; }
+.intro-copy { margin: 0; font-size: 14px; line-height: 1.75; color: #9cabb2; }
+.studio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+.panel { border: 1px solid var(--line); border-radius: 16px; background: #141c21; padding: 26px; } .panel-heading { justify-content: space-between; gap: 12px; }
+h2 { font-size: 15px; font-weight: 700; margin: 0; letter-spacing: -.2px; }
+.status-badge { border: 1px solid #354047; background: #1b262b; color: #96a6ae; border-radius: 20px; padding: 5px 9px; font-size: 9px; letter-spacing: 1.2px; white-space: nowrap; }
+body[data-session-status='running'] .status-badge { color: var(--mint); border-color: #446d5c; background: #233e32; }
+.session-visual { height: 122px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+.voice-orb { font-size: 46px; color: #b7efd5; border-radius: 50%; width: 84px; height: 84px; display: grid; place-items: center; background: radial-gradient(circle at 30% 25%, #365346, #192c26 70%); border: 1px solid #3a5548; box-shadow: 0 0 45px #9ae8bb0d; }
+.waveform { display: flex; align-items: center; gap: 4px; height: 16px; opacity: .4; } .waveform i { width: 3px; height: 5px; border-radius: 2px; background: var(--mint); } .waveform i:nth-child(3n) { height: 12px; } .waveform i:nth-child(2n) { height: 8px; }
+body[data-session-status='running'] .waveform { opacity: 1; } body[data-session-status='running'] .waveform i { animation: voice-wave 1.3s ease-in-out infinite alternate; } body[data-session-status='running'] .waveform i:nth-child(2n) { animation-delay: -.5s; } body[data-session-status='running'] .waveform i:nth-child(3n) { animation-delay: -.9s; }
+@keyframes voice-wave { to { transform: scaleY(.4); } }
+.connection-status { text-align: center; font-size: 15px; margin: 0; font-weight: 600; } .session-hint { text-align: center; color: var(--muted); line-height: 1.5; font-size: 12px; margin: 9px 0 26px; min-height: 18px; }
+label { display: block; font-size: 12px; color: #b7c4ca; margin-bottom: 9px; } .device-row { gap: 8px; }
+select, input[type='text'] { color: #d7e2e6; background: #0e161a; border: 1px solid #334149; border-radius: 8px; padding: 12px; min-width: 0; width: 100%; font-size: 12px; }
+.icon-button { width: 40px; min-width: 40px; height: 41px; border: 1px solid #334149; border-radius: 8px; color: #b9c6cc; background: #1c282e; font-size: 22px; }
+.input-meter { height: 3px; margin-top: 10px; background: #253239; border-radius: 2px; overflow: hidden; } .input-meter span { display: block; width: 0; height: 100%; background: var(--mint); transition: width .08s; }
+.primary-actions, .secondary-actions { display: flex; gap: 9px; } .primary-actions { margin-top: 23px; } .secondary-actions { margin-top: 9px; }
+.button { border-radius: 8px; border: 1px solid transparent; min-height: 42px; padding: 11px 14px; font-size: 12px; font-weight: 600; transition: background .15s, border-color .15s; }
+.primary-actions .button, .secondary-actions .button { flex: 1; } .button.primary { color: #143123; background: var(--mint); } .button.primary:hover:not(:disabled) { background: #d3f9e8; } .button.primary span { font-size: 10px; margin-right: 5px; }
+.button.secondary { background: #1b272d; border-color: #344249; color: #c5d2d7; } .button.secondary:hover:not(:disabled) { background: #27363d; border-color: #61757e; }
+.button.danger { background: #35262a; border-color: #624047; color: #edbabf; } .button[aria-pressed='true'] { color: #f3c0a5; border-color: #835c47; background: #37291f; }
+.check-row { display: flex; align-items: start; gap: 10px; font-size: 12px; line-height: 1.5; margin: 23px 0 0; cursor: pointer; } .check-row input { accent-color: #b7efd5; margin: 3px 0 0; width: 14px; height: 14px; } .check-row small { display: block; color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 4px; }
+.keyboard-hint { color: #75878f; font-size: 10px; margin: 20px 0 0; line-height: 1.7; } kbd { font-family: inherit; padding: 1px 4px; border: 1px solid #3b4a51; border-radius: 3px; color: #aebfc6; }
+.side-panels { display: flex; flex-direction: column; gap: 20px; } .obs-panel { background: linear-gradient(135deg, #1a2925, #141e22 70%); } .obs-panel h2 { font-size: 23px; font-weight: 500; letter-spacing: -.7px; line-height: 1.3; margin-bottom: 12px; } .obs-panel > p:not(.eyebrow) { color: #9eafb6; font-size: 12px; line-height: 1.75; margin: 0 0 23px; }
+.overlay-url-row { gap: 7px; flex-wrap: wrap; } .overlay-url-row input { font-family: 'Cascadia Code', Consolas, monospace; font-size: 11px; flex: 1 1 170px; } .overlay-url-row button { flex: 0 0 auto; font-size: 10px; min-height: 39px; padding: 9px 11px; }
+.obs-panel .small-note { font-size: 10px !important; color: #7f969f !important; line-height: 1.5 !important; margin: 9px 0 21px !important; }
+.setup-steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 13px; } .setup-steps li { color: #b0bec4; font-size: 11px; line-height: 1.65; padding-left: 27px; position: relative; } .setup-steps li span { color: #729c88; font-size: 9px; letter-spacing: 1px; position: absolute; left: 0; top: 2px; } .setup-steps strong { font-weight: 500; color: #dbe7e4; }
+.viewer-status { gap: 8px; color: #90a39f; font-size: 10px; border-top: 1px solid #2a3938; margin-top: 24px; padding-top: 18px; } .viewer-dot { width: 5px; height: 5px; border-radius: 50%; background: #687d77; } body[data-viewers='true'] .viewer-dot { background: var(--mint); }
+.transcript-panel h2 { font-size: 12px; color: #aabec5; } .thinking-label { font-size: 10px; color: var(--mint); } .control-caption { min-height: 45px; max-height: 170px; overflow-y: auto; color: #e0e9ec; font-size: 14px; line-height: 1.7; margin: 20px 0 0; overflow-wrap: anywhere; }
+.notice { font-size: 12px; padding: 12px; border-radius: 8px; line-height: 1.6; margin-bottom: 18px; } .error-notice { color: #f3b5b3; background: #41282b; border: 1px solid #734044; }
+.task-status { border-top: 1px solid var(--line); color: #9db9ac; font-size: 11px; line-height: 1.6; padding-top: 12px; margin: 16px 0 0; }
+.studio-footer { justify-content: space-between; color: #657981; font-size: 10px; border-top: 1px solid var(--line); margin-top: 30px; padding-top: 20px; gap: 20px; }
+.overlay-page { background: transparent !important; overflow: hidden; width: 100vw; height: 100vh; color-scheme: normal; } html.overlay-root { background: transparent !important; } .overlay-page #avatar-container { position: absolute; inset: 0; width: 100%; height: 100%; }
+.overlay-caption { position: fixed; bottom: 7%; left: 50%; transform: translateX(-50%); width: max-content; max-width: 84%; max-height: 30vh; overflow: hidden; font: 500 clamp(16px, 2.3vw, 30px)/1.5 'DM Sans', sans-serif; color: white; text-align: center; text-shadow: 0 2px 6px #000c, 0 0 2px #000; white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none; } .overlay-caption:not(:empty) { padding: 9px 18px; border-radius: 10px; background: #101820a6; }
+.overlay-thinking { position: fixed; top: 20px; right: 24px; color: #d8eee5; font-size: 13px; text-shadow: 0 1px 4px black; }
+.overlay-notices { position: fixed; bottom: 14px; left: 16px; max-width: min(440px, calc(100vw - 32px)); display: grid; gap: 6px; font-size: 12px; line-height: 1.5; } .overlay-notices [role='status']:not(:empty), .overlay-notices [role='alert']:not([hidden]) { color: #e4ece9; background: #14211eec; border: 1px solid #527366; border-radius: 7px; padding: 7px 10px; } .overlay-notices [role='alert']:not([hidden]) { color: #ffd7c4; border-color: #876353; background: #33241ff0; } .overlay-notices button { justify-self: start; }
+@media (max-width: 760px) { .studio { padding: 24px; } .studio-grid { grid-template-columns: 1fr; } .intro { padding: 31px 0; } .intro h1 br, .intro-copy br { display: none; } .local-badge { letter-spacing: 1px; font-size: 8px; } .studio-footer { line-height: 1.6; } }
+@media (max-width: 420px) { .studio { padding: 18px 14px; } .local-badge { display: none; } .panel { padding: 20px; } .intro h1 { font-size: 32px; } .studio-header { padding-bottom: 20px; } .keyboard-hint, .studio-footer > span:last-child { display: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

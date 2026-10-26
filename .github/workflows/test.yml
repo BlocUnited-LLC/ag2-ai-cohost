@@ -1,0 +1,35 @@
+name: Cohost tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: ag2-backend/requirements.txt
+      - run: npm ci
+      - run: python -m pip install -r ag2-backend/requirements.txt
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+        env:
+          COHOST_PYTHON: python
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-evidence
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7

@@ -7,7 +7,9 @@
     "setup": "node scripts/setup-ag2.js",
     "start": "node server.js",
     "start:ag2": "node scripts/start-ag2.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run test:backend && npm run test:e2e",
+    "test:backend": "node scripts/test-backend.js",
+    "test:e2e": "playwright test"
   },
   "keywords": [],
   "author": "",
@@ -15,5 +17,8 @@
   "dependencies": {
     "express": "^5.2.1",
     "http-proxy-middleware": "^3.0.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1"
   }
 }

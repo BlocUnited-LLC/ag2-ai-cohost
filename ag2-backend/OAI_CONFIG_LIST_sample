@@ -24,6 +24,9 @@
                 }
             ]
         },
+        "enabled_tools": ["web_search"],
+        "research_model": "gpt-5-mini",
+        "research_limit": 3,
         "web_search_model": "gpt-5-mini",
         "web_search_limit": 10
     }

@@ -43,7 +43,7 @@ The app runs locally with a Node.js web server and an AG2 Python backend. Voice 
 | **Bring it on screen** | Use the transparent browser scene in OBS, with captions and a thinking indicator. |
 | **Extend its abilities** | Use the web-search tool or build integrations from the included Python tool functions. |
 
-> **Integration status:** voice, avatar, and web-search paths are implemented. Chat moderation, stream-title changes, overlays, and sound-effect tools are currently placeholders that need platform APIs. The newsletter tool makes real requests to a configured service. See [tool configuration and status](docs/configuration.md#tools-and-function-calling).
+> **Integration status:** voice, avatar, captions, and web search are implemented. An optional AG2 research helper can work in the background. Chat moderation and stream-control placeholders are not exposed to the model. Newsletter signup is opt-in and requires your endpoint. See [tool configuration and status](docs/configuration.md#tools-and-function-calling).
 
 ## How it works
 
@@ -51,9 +51,9 @@ The app runs locally with a Node.js web server and an AG2 Python backend. Voice 
   <img src="docs/assets/ag2-ai-cohost-infographic.png" alt="Four steps: speak into your microphone; AG2 and OpenAI Realtime respond; the browser animates the avatar with voice, lip-sync, and captions; add the browser scene to OBS." width="100%" />
 </p>
 
-The browser streams microphone audio through the Node.js server to **FastAPI + AG2 LiveAgent**, which connects to OpenAI Realtime. Returned audio drives the voice and avatar; conversation events update captions and the thinking indicator. OBS displays the browser scene as part of your broadcast.
+The **control page** in Chrome or Edge captures your microphone and controls one shared **AG2 LiveAgent** conversation. The **overlay page** receives its audio, avatar animation, and captions in OBS. Reloading or switching an OBS source does not create another AI conversation. Only clicking **Start cohost** opens the provider connection.
 
-**Current transport:** 24 kHz PCM audio over a WebSocket at `/session`. The repository retains filenames such as `webrtc.js` and `realtime_over_webrtc/` from its earlier WebRTC implementation. API credentials stay in the Python backend.
+**Current transport:** 24 kHz PCM audio over an authenticated WebSocket at `/session`. AG2 is pinned to **1.2.1**. The Python directory retains the legacy name `realtime_over_webrtc/`; the transport uses WebSockets. API credentials stay in the Python backend. Both services bind to loopback by default.
 
 **Stack:** Node.js / Express · Python / FastAPI · AG2 LiveAgent · OpenAI Realtime · TalkingHead / HeadAudio · Three.js
 
@@ -61,7 +61,7 @@ The browser streams microphone audio through the Node.js server to **FastAPI + A
 
 ### 1. Get the prerequisites
 
-- **Node.js 18+**, **Python 3.10+**, and **Git**.
+- **Node.js 22+**, **Python 3.10+**, and **Git**. CI uses Python 3.13.
 - **Chrome or Edge**, a microphone, and headphones for clearer interruptions.
 - An **OpenAI API key** with access to the model configured in the [sample configuration](ag2-backend/OAI_CONFIG_LIST_sample). The sample uses `gpt-realtime-2` for voice and `gpt-5-mini` for web search; provider usage is billed to your account.
 - **OBS Studio** if you want to add the cohost to a broadcast.
@@ -99,17 +99,52 @@ npm run start:ag2
 npm start
 ```
 
-Open **[http://localhost:3001](http://localhost:3001)**, click **▶ Click to Start**, allow microphone access, and start talking. Press **M** to mute or unmute; a red **MIC OFF** indicator shows when the microphone is muted.
+Open **[http://localhost:3001/control](http://localhost:3001/control)** in Chrome or Edge, choose your microphone, and click **Start cohost**. Allow microphone access and start talking. Press **M** to mute or unmute and **Escape** to interrupt. Enable **Monitor audio in this browser** for a browser-only conversation; leave it off when OBS handles the sound.
 
 Having trouble with audio or the avatar? Start with [troubleshooting](docs/troubleshooting.md).
 
 ## Bring your cohost into OBS
 
-1. Keep both services running and add a **Browser Source** in OBS.
-2. Set its URL to `http://localhost:3001` and its size to match your scene, such as **1280 × 720**.
-3. Use the source's **Interact** window to click **▶ Click to Start**. Verify microphone input and audio output in your OBS setup before going live.
+1. Keep both services running and open the control page in Chrome or Edge. Click **Copy overlay URL**; leave **Monitor audio in this browser** off when OBS handles the sound.
+2. In OBS, choose your existing **Scene Collection** and the scene where the cohost belongs. In **Sources**, click **+ → Browser**, create a source named **AG2 Cohost**, and paste the full URL, including its `#token=…` fragment.
+3. Set the Browser Source to **1280 × 720** and enable **Control audio via OBS**.
+4. Move **AG2 Cohost** above backgrounds and display/game captures in the Sources list. Scale and position it in the preview beside your camera or content, keeping captions and alerts readable. Click its padlock once placed.
+5. Click **Start cohost** on the control page. Check the avatar, captions, and OBS audio meter. OBS receives the overlay; microphone capture stays in Chrome or Edge.
+6. For another scene in the same collection, use **+ → Browser → Add Existing → AG2 Cohost**. Position it independently in that scene. A different collection needs its own Browser Source with the same current overlay URL.
 
-The page has a transparent background so you can place the avatar alongside your camera or other content. Browser-source microphone support depends on the OBS environment; see [browser controls and OBS setup](docs/usage.md) for setup notes and a browser-capture alternative.
+The background is transparent. Keep one audible overlay per active scene and check the OBS monitoring/output route before going live. The private overlay link changes when the backend restarts; copy the new one into each collection that uses it. See [existing-scene setup and audio routing](docs/usage.md#obs-browser-source) for details.
+
+**CaptainCode example:** in the **CaptnCode** collection's **Main Screen** scene, **AG2 Cohost** sits at the top of Sources and is locked in the lower-left corner. Its 1280 × 720 viewport is displayed at **800 × 450**, positioned at **X 24, Y 606** on a 1920 × 1080 canvas, clear of the top banner and lower-right webcam frame. See the [exact layout and audio settings](docs/usage.md#captaincode-layout-example) to reproduce it.
+
+### Run it next time in CaptainCode
+
+The OBS scene setup is saved. Each time you want to use the cohost:
+
+1. Open two terminals in the `ag2-ai-cohost` repository folder.
+2. In the first terminal, start the AI backend:
+
+   ```bash
+   npm run start:ag2
+   ```
+
+3. In the second terminal, start the web app:
+
+   ```bash
+   npm start
+   ```
+
+4. Open [http://localhost:3001/control](http://localhost:3001/control) in Chrome or Edge. Wait until it says **Ready when you are**.
+5. In OBS, open **CaptnCode → Main Screen**. If the avatar is missing after restarting the backend, click **Copy overlay URL** on the control page, open **AG2 Cohost → Properties** in OBS, replace the old URL, and click **OK**. The complete `#token=…` fragment must be included.
+6. Confirm the control page says **1 overlay connected** and the avatar appears in the lower-left corner. Choose your microphone and keep **Monitor audio in this browser** off when OBS handles the audio.
+7. Click **Start cohost**. Allow microphone access if the browser asks. Speak normally and verify that the avatar moves, captions appear, and the **AG2 Cohost** meter moves in OBS.
+8. Use **M** to mute, **Escape** to interrupt a response, and **Stop cohost** when finished.
+9. After stopping the cohost, close the control page and press **Ctrl+C** once in each terminal to shut down both local services. The OBS source and its position remain saved.
+
+Starting the services or opening the pages does not begin a paid AI session. The provider connection starts only when you click **Start cohost**.
+
+## Tests
+
+After setup, run `npx playwright install chromium` once, then `npm test`. Backend tests and Playwright browser tests use a simulated provider with the real LiveAgent event path; they do not read your API key or make paid calls. CI runs the same checks. A real OBS Browser Source and a live provider conversation remain separate acceptance checks.
 
 ## Make it your own
 
