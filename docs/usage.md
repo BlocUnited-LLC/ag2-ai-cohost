@@ -57,11 +57,11 @@ adding multiple copies to one active scene, including through nested scenes. A
 overlay URL there. All viewers still receive the one conversation controlled by the
 control page.
 
-### CaptainCode layout example
+### Example OBS layout
 
-The **CaptnCode** collection uses **AG2 Cohost** in its **Main Screen** scene.
-This places the avatar and captions in the lower-left corner, clear of the top
-banner and lower-right webcam frame.
+You can use **AG2 Cohost** in any scene collection and scene. The following
+example places the avatar and captions in the lower-left corner of a 1920 × 1080
+canvas. Adjust it around your own banners, camera, alerts, and other scene elements.
 
 | Setting | Value |
 | --- | --- |
