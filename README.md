@@ -114,9 +114,9 @@ Having trouble with audio or the avatar? Start with [troubleshooting](docs/troub
 
 The background is transparent. Keep one audible overlay per active scene and check the OBS monitoring/output route before going live. The private overlay link changes when the backend restarts; copy the new one into each collection that uses it. See [existing-scene setup and audio routing](docs/usage.md#obs-browser-source) for details.
 
-**CaptainCode example:** in the **CaptnCode** collection's **Main Screen** scene, **AG2 Cohost** sits at the top of Sources and is locked in the lower-left corner. Its 1280 × 720 viewport is displayed at **800 × 450**, positioned at **X 24, Y 606** on a 1920 × 1080 canvas, clear of the top banner and lower-right webcam frame. See the [exact layout and audio settings](docs/usage.md#captaincode-layout-example) to reproduce it.
+**Example layout:** in your scene collection's cohost scene, **AG2 Cohost** can sit at the top of Sources and be locked in the lower-left corner. Its 1280 × 720 viewport can be displayed at **800 × 450**, positioned at **X 24, Y 606** on a 1920 × 1080 canvas. Adjust the position around your own banners, camera, alerts, and other scene elements. See the [example layout and audio settings](docs/usage.md#example-obs-layout) to reproduce or adapt it.
 
-### Run it next time in CaptainCode
+### Run it next time in OBS
 
 The OBS scene setup is saved. Each time you want to use the cohost:
 
@@ -134,8 +134,8 @@ The OBS scene setup is saved. Each time you want to use the cohost:
    ```
 
 4. Open [http://localhost:3001/control](http://localhost:3001/control) in Chrome or Edge. Wait until it says **Ready when you are**.
-5. In OBS, open **CaptnCode → Main Screen**. If the avatar is missing after restarting the backend, click **Copy overlay URL** on the control page, open **AG2 Cohost → Properties** in OBS, replace the old URL, and click **OK**. The complete `#token=…` fragment must be included.
-6. Confirm the control page says **1 overlay connected** and the avatar appears in the lower-left corner. Choose your microphone and keep **Monitor audio in this browser** off when OBS handles the audio.
+5. In OBS, open your scene collection and the scene containing **AG2 Cohost**. If the avatar is missing after restarting the backend, click **Copy overlay URL** on the control page, open **AG2 Cohost → Properties** in OBS, replace the old URL, and click **OK**. The complete `#token=…` fragment must be included.
+6. Confirm the control page says **1 overlay connected** and the avatar appears in your chosen scene position. Choose your microphone and keep **Monitor audio in this browser** off when OBS handles the audio.
 7. Click **Start cohost**. Allow microphone access if the browser asks. Speak normally and verify that the avatar moves, captions appear, and the **AG2 Cohost** meter moves in OBS.
 8. Use **M** to mute, **Escape** to interrupt a response, and **Stop cohost** when finished.
 9. After stopping the cohost, close the control page and press **Ctrl+C** once in each terminal to shut down both local services. The OBS source and its position remain saved.
