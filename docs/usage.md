@@ -107,10 +107,26 @@ stop their local playback. A reloaded source receives current captions and futur
 audio, without replaying old speech. **Refresh browser when scene becomes active**
 is normally unnecessary and causes a short rendering reconnect.
 
-OBS normally permits Browser Source audio automatically. If it displays **Enable
-audio**, open **Interact** and click that button. Microphone capture always stays in
-Chrome or Edge. The avatar requires access to its pinned CDN libraries; an avatar
-load failure leaves audio and captions available with a visible error.
+OBS normally permits Browser Source audio automatically. Microphone capture always
+stays in Chrome or Edge. The avatar requires access to its pinned CDN libraries;
+an avatar load failure leaves audio and captions available.
+
+### Broadcast view and overlay diagnostics
+
+The copied `/overlay#token=…` URL hides setup messages, error banners, and the audio
+enable button in every session state, including while idle or disconnected. The
+avatar, speech captions, and thinking indicator remain visible. Check the control
+page for session/provider errors; hidden notices do not mean a failed connection
+has recovered.
+
+For overlay-specific diagnostics, click **Open overlay diagnostics** in the control
+page. Alternatively, add `?diagnostics=1` **before** the token fragment in a copy of
+the current URL: `/overlay?diagnostics=1#token=…`. This displays setup,
+authentication, avatar, and audio notices. If audio is suspended, click **Enable
+cohost audio** in this view (use OBS **Interact** if testing the actual Browser
+Source). Stop recording before enabling diagnostics on an OBS source; OBS records
+the same content it previews. Remove `?diagnostics=1` afterward to restore the clean
+broadcast view. Close any extra diagnostics browser tab to avoid doubled audio.
 
 The overlay URL is a local viewer credential. It cannot start/stop the cohost or send
 microphone audio. Keep it private, including in scene-collection exports and

@@ -2,6 +2,9 @@ import { AudioBridge, SessionConnection, showError } from './session.js';
 
 const $ = (id) => document.getElementById(id);
 const token = new URLSearchParams(location.hash.slice(1)).get('token');
+// A Browser Source captures everything this page renders, even in OBS preview.
+// Keep operator notices off the broadcast unless diagnostics are explicitly opened.
+$('overlay-notices').hidden = new URLSearchParams(location.search).get('diagnostics') !== '1';
 let connection;
 let connected = false;
 let state = { status: 'idle' };
@@ -11,6 +14,7 @@ let sourceActive = true;
 let active = true;
 let avatarFailure = '';
 let audioFailure = '';
+let connectionFailure = '';
 
 const audio = new AudioBridge({
   onPlayback: (receipt) => connection?.send(receipt),
@@ -31,10 +35,15 @@ function renderStatus() {
   $('connection-status').textContent = state.status === 'starting' ? 'The cohost is starting…' : state.status === 'running' ? '' : state.status === 'error' ? 'The cohost needs attention in the control page.' : 'Overlay connected · Start the cohost from your control page.';
 }
 
+function renderError() {
+  showError(audioFailure || avatarFailure || connectionFailure || state.error || '');
+}
+
 async function enableAudio() {
   try {
     const running = await audio.resume();
     audioFailure = '';
+    renderError();
     $('enable-audio-btn').hidden = running;
     if (avatarReady) {
       await window.resumeAudio();
@@ -66,7 +75,8 @@ async function loadAvatar() {
 function connect() {
   if (!token) {
     $('connection-status').textContent = '';
-    showError('This overlay needs its private link. Copy the Browser Source URL from the cohost control page.');
+    connectionFailure = 'This overlay needs its private link. Copy the Browser Source URL from the cohost control page.';
+    renderError();
     return;
   }
   connection = new SessionConnection({
@@ -75,13 +85,17 @@ function connect() {
     onConnection: (status, message) => {
       connected = status === 'connected';
       if (connected) {
+        connectionFailure = '';
         updateOutput();
-        showError(audioFailure || avatarFailure);
+        renderError();
         renderStatus();
       } else {
         $('connection-status').textContent = message || 'Connecting to your cohost…';
         void audio.clear();
-        if (status === 'failed') showError(message);
+        if (status === 'failed') {
+          connectionFailure = message;
+          renderError();
+        }
       }
     },
     onEvent: (message) => {
@@ -91,7 +105,7 @@ function connect() {
         if (state.status !== 'running' || (previousId && previousId !== state.sessionId)) void audio.clear();
         $('subtitle-overlay').textContent = state.subtitle || '';
         $('thinking-indicator').hidden = !state.thinking;
-        if (state.error) showError(state.error);
+        renderError();
         renderStatus();
       } else if (message.type === 'subtitle') {
         $('subtitle-overlay').textContent = message.payload || '';
@@ -106,7 +120,8 @@ function connect() {
         $('subtitle-overlay').textContent = '';
         $('thinking-indicator').hidden = true;
       } else if (message.type === 'error') {
-        showError(message.message || message.error || 'The cohost encountered an error.');
+        state.error = message.message || message.error || 'The cohost encountered an error.';
+        renderError();
       }
     }
   });

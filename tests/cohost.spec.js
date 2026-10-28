@@ -38,7 +38,7 @@ async function instrument(context, { denyMicrophone = false } = {}) {
   await context.addInitScript(({ deny }) => {
     const observed = window.__cohostTest = {
       microphoneRequests: 0, tracksStopped: 0, playerMessages: [],
-      received: [], sent: [], sentBinaryBytes: 0, sockets: [], avatarStream: false,
+      received: [], sent: [], sentBinaryBytes: 0, sockets: [], avatarStream: false, audioContexts: [],
     };
     const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = async (constraints) => {
@@ -74,6 +74,7 @@ async function instrument(context, { denyMicrophone = false } = {}) {
       window.AudioWorkletNode = class extends NativeAudioWorkletNode {
         constructor(context, name, options) {
           super(context, name, options);
+          if (!observed.audioContexts.includes(context)) observed.audioContexts.push(context);
           const post = this.port.postMessage.bind(this.port);
           this.port.postMessage = (message, ...rest) => {
             observed.playerMessages.push({ name, type: message.type, bytes: message.buffer?.byteLength });
@@ -98,10 +99,10 @@ async function startController(page, request) {
   return page.locator('body').getAttribute('data-session-id');
 }
 
-async function openOverlay(context, request) {
+async function openOverlay(context, request, { diagnostics = false } = {}) {
   const { viewerToken } = await (await request.get('/api/bootstrap')).json();
   const page = await context.newPage();
-  await page.goto(`/overlay#token=${encodeURIComponent(viewerToken)}`);
+  await page.goto(`/overlay${diagnostics ? '?diagnostics=1' : ''}#token=${encodeURIComponent(viewerToken)}`);
   await expect.poll(() => page.evaluate(() => window.__cohostTest.received.some((item) => item.type === 'authenticated'))).toBeTruthy();
   return page;
 }
@@ -122,11 +123,47 @@ test.afterEach(async ({ request }, testInfo) => {
 test('opening controls and overlays never starts a provider or captures overlay microphone', async ({ page, context, request }) => {
   await openController(page);
   const overlay = await openOverlay(context, request);
-  await expect(overlay.locator('#enable-audio-btn')).toHaveCount(1);
+  await expect(overlay.locator('#enable-audio-btn')).toBeHidden();
+  await expect(overlay.locator('#connection-status')).toBeHidden();
+  await expect(overlay.locator('[data-testid="avatar-stub"]')).toBeVisible();
   await expect.poll(() => stats(request)).toMatchObject({ starts: 0, audioMessages: 0 });
   expect(await page.evaluate(() => window.__cohostTest.microphoneRequests)).toBe(0);
   expect(await overlay.evaluate(() => window.__cohostTest.microphoneRequests)).toBe(0);
   expect(await overlay.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+});
+
+test('operator notices and audio recovery controls require diagnostic preview mode', async ({ page, context, request }) => {
+  await openController(page);
+  const broadcastUrl = new URL(await page.locator('#overlay-url').inputValue());
+  expect(broadcastUrl.pathname).toBe('/overlay');
+  expect(broadcastUrl.search).toBe('');
+  const clean = await openOverlay(context, request);
+  const previewOpened = context.waitForEvent('page');
+  await page.locator('#diagnostics-link').click();
+  const preview = await previewOpened;
+  await expect(preview).toHaveURL(/\/overlay\?diagnostics=1#token=/);
+  await expect(preview.locator('#connection-status')).toBeVisible();
+  await expect(preview.locator('#connection-status')).toContainText('Start the cohost from your control page');
+  await expect(clean.locator('#connection-status')).toBeHidden();
+
+  // A suspended output needs a user gesture in a regular browser. Even then,
+  // setup controls must stay out of the recorded overlay.
+  for (const overlay of [clean, preview]) {
+    await expect.poll(() => overlay.evaluate(() => window.__cohostTest.audioContexts.length)).toBeGreaterThan(0);
+    await overlay.evaluate(() => Promise.all(window.__cohostTest.audioContexts.map((audio) => audio.suspend())));
+  }
+  await expect(preview.locator('#enable-audio-btn')).toBeVisible();
+  await expect(clean.locator('#enable-audio-btn')).toBeHidden();
+});
+
+test('missing overlay credentials are explained only in diagnostic preview mode', async ({ page }) => {
+  await page.goto('/overlay');
+  await expect(page.locator('#error-message')).toContainText('needs its private link');
+  await expect(page.locator('#error-message')).toBeHidden();
+  await page.goto('/overlay?diagnostics=1');
+  await expect(page.locator('#error-message')).toBeVisible();
+  await expect(page.locator('#error-message')).toContainText('needs its private link');
+  expect(await page.evaluate(() => window.__cohostTest.microphoneRequests)).toBe(0);
 });
 
 test('one producer broadcasts audio and captions to multiple overlays, including after reload', async ({ page, context, request }, testInfo) => {
@@ -144,6 +181,9 @@ test('one producer broadcasts audio and captions to multiple overlays, including
   await emit(request, 'done');
   for (const overlay of [first, second]) {
     await expect(overlay.locator('#subtitle-overlay')).toContainText('Welcome to the test broadcast.');
+    await expect(overlay.locator('#subtitle-overlay')).toBeVisible();
+    await expect(overlay.locator('#connection-status')).toBeHidden();
+    await expect(overlay.locator('#error-message')).toBeHidden();
     await expect.poll(() => overlay.evaluate(() => window.__cohostTest.playerMessages.some((item) => item.type === 'audio' && item.bytes > 0))).toBeTruthy();
     expect(await overlay.evaluate(() => window.__cohostTest.microphoneRequests)).toBe(0);
     expect(await overlay.evaluate(() => window.__cohostTest.sentBinaryBytes)).toBe(0);
@@ -228,6 +268,15 @@ test('microphone permission denial is visible and creates no provider session', 
     await page.locator('#start-btn').click();
     await expect(page.locator('#error-message')).toBeVisible();
     await expect(page.locator('#error-message')).toContainText(/microphone|permission|denied/i);
+    const microphoneError = await page.locator('#error-message').textContent();
+    const overlay = await openOverlay(context, request);
+    await expect(page.locator('#viewer-count')).toHaveText('1 overlay connected');
+    await expect(page.locator('#error-message')).toBeVisible();
+    await expect(page.locator('#error-message')).toHaveText(microphoneError);
+    await overlay.close();
+    await expect(page.locator('#viewer-count')).toHaveText('No overlay connected');
+    await expect(page.locator('#error-message')).toBeVisible();
+    await expect(page.locator('#error-message')).toHaveText(microphoneError);
     expect((await stats(request)).starts).toBe(0);
     await testInfo.attach('microphone-denied', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
   } finally { await context.close(); }
@@ -262,17 +311,39 @@ test('losing the controller stops the provider after the reconnect grace period'
   expect(await overlay.evaluate(() => window.__cohostTest.microphoneRequests)).toBe(0);
 });
 
-test('provider failure is visible, ends transport, and allows a fresh start', async ({ page, context, request }) => {
+test('provider errors stay off the broadcast and clear in controls and preview after restart or stop', async ({ page, context, request }) => {
   await startController(page, request);
   const overlay = await openOverlay(context, request);
+  const preview = await openOverlay(context, request, { diagnostics: true });
   await emit(request, 'failure');
   await expect(page.locator('#error-message')).toBeVisible();
+  await expect(preview.locator('#error-message')).toBeVisible();
+  await expect(preview.locator('#error-message')).toContainText('cohost connection failed');
+  await expect(overlay.locator('#error-message')).toContainText('cohost connection failed');
+  await expect(overlay.locator('#error-message')).toBeHidden();
+  await expect(overlay.locator('#connection-status')).toBeHidden();
   await expect(page.locator('body')).toHaveAttribute('data-session-status', 'error');
   await expect(overlay.locator('body')).toHaveAttribute('data-session-status', 'error');
   await expect.poll(() => stats(request)).toMatchObject({ closes: 1, clientCloses: 1 });
   await page.locator('#start-btn').click();
   await expect(page.locator('body')).toHaveAttribute('data-session-status', 'running');
+  await expect(preview.locator('body')).toHaveAttribute('data-session-status', 'running');
+  await expect(page.locator('#error-message')).toBeHidden();
+  await expect(preview.locator('#error-message')).toBeHidden();
   await expect.poll(async () => (await stats(request)).starts).toBe(2);
+
+  await emit(request, 'failure');
+  await expect(page.locator('#error-message')).toBeVisible();
+  await expect(preview.locator('#error-message')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-session-status', 'error');
+  // Stop is also a valid protocol command after an error, although the UI
+  // already considers the failed provider stopped and offers a fresh start.
+  await page.evaluate(() => window.__cohostTest.sockets.at(-1).send(JSON.stringify({ type: 'stop' })));
+  await expect(page.locator('body')).toHaveAttribute('data-session-status', 'idle');
+  await expect(preview.locator('body')).toHaveAttribute('data-session-status', 'idle');
+  await expect(page.locator('#error-message')).toBeHidden();
+  await expect(preview.locator('#error-message')).toBeHidden();
+  await expect(preview.locator('#connection-status')).toContainText('Start the cohost from your control page');
 });
 
 test('bad credentials, hostile origins, and viewer control commands cannot start sessions', async ({ page, context, request }) => {

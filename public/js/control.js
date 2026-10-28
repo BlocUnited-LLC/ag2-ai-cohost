@@ -50,6 +50,7 @@ function render() {
 function onEvent(message) {
   if (message.type === 'state') {
     const previousStatus = state.status;
+    const previousError = state.error;
     state = message;
     audio.setMuted(Boolean(state.muted));
     $('subtitle-overlay').textContent = state.subtitle || 'The conversation will appear here.';
@@ -59,6 +60,8 @@ function onEvent(message) {
       void audio.clear();
     }
     if (state.error) showError(state.error);
+    // Clear a resolved session error without erasing a newer local device error.
+    else if (previousError && $('error-message').textContent === previousError) showError('');
     render();
   } else if (message.type === 'subtitle') {
     $('subtitle-overlay').textContent = message.payload || '';
@@ -182,6 +185,10 @@ async function bootstrap() {
     const overlayUrl = new URL('/overlay', location.href);
     overlayUrl.hash = new URLSearchParams({ token: config.viewerToken }).toString();
     $('overlay-url').value = overlayUrl.href;
+    const diagnosticsUrl = new URL(overlayUrl);
+    diagnosticsUrl.searchParams.set('diagnostics', '1');
+    $('diagnostics-link').href = diagnosticsUrl.href;
+    $('diagnostics-link').hidden = false;
     $('copy-overlay-btn').disabled = false;
     connection?.disconnect();
     connection = new SessionConnection({

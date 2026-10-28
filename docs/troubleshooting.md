@@ -19,7 +19,9 @@ owns the session, close it before opening a replacement.
 - In a browser-only session, enable **Monitor audio in this browser**.
 - In OBS, use the copied **overlay** URL and enable **Control audio via OBS**.
   Check the source's mute state and Advanced Audio Properties.
-- If the overlay displays **Enable audio**, use OBS **Interact** to click it.
+- Temporarily add `?diagnostics=1` before `#token=…` in the overlay URL to show
+  audio/setup notices. If **Enable cohost audio** appears, use OBS **Interact** to
+  click it. Remove the diagnostics query before recording.
 - After reloading the control page, click **Resume microphone**.
 
 If audio doubles or echoes, keep only one audible overlay and one monitoring route.
@@ -31,6 +33,9 @@ session; the control page owns that lifecycle.
 Backend restarts rotate the viewer token. Refresh the control page, copy the new
 overlay URL, and replace the OBS URL including its fragment. A plain `/overlay`
 address is intentionally insufficient. The link never contains your provider key.
+The broadcast overlay hides operator notices. Use the control page for session
+errors or open `/overlay?diagnostics=1#token=…` with your current token to see
+overlay-specific errors. Do not use the diagnostics URL while recording.
 
 ## Avatar is missing or its mouth does not move
 
